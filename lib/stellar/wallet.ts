@@ -2,6 +2,16 @@ import { networkPassphrase } from "@/lib/config";
 
 export type WalletSnapshot = { status: "disconnected" | "connecting" | "connected" | "unsupported" | "error"; address: string | null; network: string | null; correctNetwork: boolean; error?: string };
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Wallet request failed.";
+export async function readFreighterWallet(): Promise<WalletSnapshot> {
+  try {
+    const wallet = await import("@stellar/freighter-api");
+    const [available, allowed] = await Promise.all([wallet.isConnected(), wallet.isAllowed()]);
+    if (!available.isConnected || !allowed.isAllowed) return { status: "disconnected", address: null, network: null, correctNetwork: false };
+    const [account, network] = await Promise.all([wallet.getAddress(), wallet.getNetworkDetails()]);
+    if (account.error || network.error || !account.address) return { status: "disconnected", address: null, network: null, correctNetwork: false };
+    return { status: "connected", address: account.address, network: network.network, correctNetwork: network.networkPassphrase === networkPassphrase };
+  } catch { return { status: "disconnected", address: null, network: null, correctNetwork: false }; }
+}
 export async function connectFreighter(): Promise<WalletSnapshot> {
   try {
     const wallet = await import("@stellar/freighter-api");

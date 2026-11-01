@@ -1,0 +1,2 @@
+import { ArrowLeft, SearchX } from "lucide-react"; import { ButtonLink } from "@/components/ui/button";
+export default function NotFound(){return <main className="fatal-state"><SearchX/><span className="eyebrow">404 · Route not found</span><h1>This market does not exist.</h1><p>The requested VELTRIXAE route may have moved or is not available.</p><ButtonLink href="/"><ArrowLeft/>Return home</ButtonLink></main>}
