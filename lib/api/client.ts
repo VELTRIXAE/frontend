@@ -1,5 +1,5 @@
 import { config } from "@/lib/config";
-import { assetSchema, poolSchema, quoteRequestSchema, quoteSchema, transactionBuildSchema, type QuoteRequest } from "./schemas";
+import { analyticsSchema, assetSchema, poolSchema, portfolioSchema, quoteRequestSchema, quoteSchema, transactionBuildSchema, type QuoteRequest } from "./schemas";
 import { z } from "zod";
 
 export class ApiError extends Error { constructor(message: string, public status: number, public retryable = false) { super(message); } }
@@ -27,6 +27,8 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
 export const api = {
   assets: () => request("/v1/assets", z.array(assetSchema)),
   pools: () => request("/v1/pools", z.array(poolSchema)),
+  portfolio: (account: string) => request(`/v1/portfolio/${encodeURIComponent(account)}`, portfolioSchema),
+  analytics: () => request("/v1/analytics", analyticsSchema),
   quote: (payload: QuoteRequest) => request("/v1/swap/quote", quoteSchema, { method: "POST", body: JSON.stringify(quoteRequestSchema.parse(payload)) }),
   buildSwap: (quoteId: string, account: string) => request("/v1/swap/build", transactionBuildSchema, { method: "POST", body: JSON.stringify({ quoteId, account }) }),
   submit: (signedXdr: string) => request("/v1/transactions/submit", z.object({ hash: z.string(), ledger: z.number().optional() }), { method: "POST", body: JSON.stringify({ signedXdr }) }, 0),
