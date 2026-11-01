@@ -1,0 +1,1 @@
+export default function AppLoading(){return <div className="dashboard-skeleton" aria-label="Loading dashboard"><div className="skeleton-title"/><div className="skeleton-grid">{[1,2,3,4].map(item=><div key={item}/>)}</div><div className="skeleton-panels"><div/><div/></div></div>}

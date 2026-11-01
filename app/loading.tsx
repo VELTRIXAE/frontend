@@ -1,0 +1,1 @@
+export default function Loading(){return <main className="route-loading" aria-label="Loading VELTRIXAE"><div className="loading-mark">V</div><div><i/><i/><i/></div><span className="sr-only">Loading</span></main>}
