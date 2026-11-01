@@ -1,12 +1,13 @@
 "use client";
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { connectFreighter, type WalletSnapshot } from "@/lib/stellar/wallet";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { connectFreighter, readFreighterWallet, type WalletSnapshot } from "@/lib/stellar/wallet";
 
 type WalletContextValue = WalletSnapshot & { connect: () => Promise<void>; disconnect: () => void };
 const initial: WalletSnapshot = { status: "disconnected", address: null, network: null, correctNetwork: false };
 const WalletContext = createContext<WalletContextValue | null>(null);
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [wallet, setWallet] = useState(initial);
+  useEffect(() => { let active = true; readFreighterWallet().then(snapshot => { if (active) setWallet(snapshot); }); return () => { active = false; }; }, []);
   const connect = useCallback(async () => { setWallet({ ...initial, status: "connecting" }); setWallet(await connectFreighter()); }, []);
   const disconnect = useCallback(() => setWallet(initial), []);
   const value = useMemo(() => ({ ...wallet, connect, disconnect }), [wallet, connect, disconnect]);
