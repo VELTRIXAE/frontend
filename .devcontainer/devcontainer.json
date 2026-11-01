@@ -1,0 +1,9 @@
+{
+  "name": "VELTRIXAE Frontend",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
+  "features": { "ghcr.io/devcontainers-extra/features/pnpm:2": { "version": "12.16.1" } },
+  "forwardPorts": [3000],
+  "portsAttributes": { "3000": { "label": "VELTRIXAE", "onAutoForward": "openPreview" } },
+  "postCreateCommand": "pnpm install --frozen-lockfile",
+  "customizations": { "vscode": { "extensions": ["dbaeumer.vscode-eslint"] } }
+}
