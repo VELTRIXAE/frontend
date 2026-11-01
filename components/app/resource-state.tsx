@@ -1,0 +1,2 @@
+import type { LucideIcon } from "lucide-react"; import { AlertTriangle } from "lucide-react";
+export function ResourceState({ icon:Icon, title, description, error }: { icon:LucideIcon; title:string; description:string; error?:string }) { return <div className={error?"empty-state error-state":"empty-state"}>{error?<AlertTriangle/>:<Icon/>}<b>{error??title}</b><p>{error?"Verify the API configuration and retry.":description}</p></div>; }
