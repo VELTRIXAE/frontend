@@ -1,0 +1,3 @@
+import { render,screen } from "@testing-library/react"; import userEvent from "@testing-library/user-event"; import { describe,expect,it,vi } from "vitest"; import { CommandPalette } from "@/components/app/command-palette";
+const push=vi.fn();vi.mock("next/navigation",()=>({useRouter:()=>({push})}));
+describe("command palette",()=>{it("opens from the keyboard and navigates",async()=>{render(<CommandPalette/>);await userEvent.keyboard("{Control>}k{/Control}");expect(screen.getByRole("dialog",{name:"Quick navigation"})).toBeInTheDocument();await userEvent.type(screen.getByRole("textbox",{name:"Search commands"}),"transactions");await userEvent.click(screen.getByRole("button",{name:/View transactions/}));expect(push).toHaveBeenCalledWith("/app/transactions")})});
