@@ -2,6 +2,16 @@
 
 **Trade Beyond Boundaries.** VELTRIXAE is a premium, non-custodial decentralized trading interface for Stellar. This repository defaults to **Stellar Testnet**; Mainnet is intentionally not selectable.
 
+## Product mockups
+
+> Concept previews use placeholder values only. Live balances, routes, and transactions are always retrieved from configured Stellar services.
+
+![VELTRIXAE desktop dashboard and swap mockup](docs/mockups/veltrixae-desktop.png)
+
+<p align="center">
+  <img src="docs/mockups/veltrixae-mobile.png" alt="VELTRIXAE mobile wallet and swap mockup" width="760" />
+</p>
+
 ## Included
 
 - Responsive marketing site and application workspace
