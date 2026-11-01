@@ -8,9 +8,12 @@
 - Freighter wallet access, network detection, disconnect, copy, and signing
 - Live aggregator quotes with route, rate, slippage, impact, deadline, and minimum received
 - Mandatory Stellar RPC simulation before wallet signing
+- Direct, validated Stellar Horizon balances, transactions, ledger health, and latency
+- Authorized Freighter session restoration and visibility-based account refresh
 - Pools, liquidity preview, portfolio, markets, transactions, and analytics interfaces
 - Zod-validated API responses with retry and explicit error states
-- Component, wallet, schema, accessibility, and responsive tests
+- Keyboard command palette (`Ctrl/⌘ + K`), route recovery, loading skeletons, and installable web manifest
+- Component, wallet, Horizon, schema, accessibility, and responsive tests with coverage gates
 
 The starting repository contained no Soroswap application source or dependencies, so there was no upstream implementation to preserve. The existing MIT license remains unchanged.
 
@@ -53,6 +56,15 @@ pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+## Automation and dependency bots
+
+- Dependabot checks npm packages every day and GitHub Actions every week, grouping related Next.js, Stellar, testing, and production updates.
+- Frontend CI runs lint, strict type checking, coverage-gated tests, and a production build for every pull request and `main` push.
+- CodeQL scans JavaScript and TypeScript on changes and every Tuesday.
+- Dependency Review blocks pull requests that introduce dependencies with moderate-or-higher known vulnerabilities.
+
+Repository settings should require the CI, CodeQL, and Dependency Review checks before merging to `main`.
 
 ## Deployment
 
