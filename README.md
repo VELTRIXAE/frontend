@@ -15,8 +15,6 @@
 - Keyboard command palette (`Ctrl/⌘ + K`), route recovery, loading skeletons, and installable web manifest
 - Component, wallet, Horizon, schema, accessibility, and responsive tests with coverage gates
 
-The starting repository contained no Soroswap application source or dependencies, so there was no upstream implementation to preserve. The existing MIT license remains unchanged.
-
 ## Development
 
 Requires Node.js 22+ and pnpm 12.16.1.
