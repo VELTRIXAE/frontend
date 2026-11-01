@@ -11,5 +11,5 @@ export default defineConfig({
     css: true,
     coverage: { reporter: ["text", "json", "html"], include: ["components/**/*.{ts,tsx}", "lib/**/*.ts"] },
   },
-  resolve: { alias: { "@": path.resolve(__dirname, ".") } },
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, ".") } },
 });
