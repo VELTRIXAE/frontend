@@ -1,2 +1,2 @@
-import { AppNav } from "@/components/app/app-nav"; import { AppHeader } from "@/components/app/app-header"; import { WalletProvider } from "@/components/wallet/wallet-provider"; import "./app.css";
+import { AppNav } from "@/components/app/app-nav"; import { AppHeader } from "@/components/app/app-header"; import { WalletProvider } from "@/components/wallet/wallet-provider"; import "./app.css"; import "./app-data.css";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) { return <WalletProvider><div className="app-shell"><AppNav/><div className="app-main"><AppHeader/><div className="app-content">{children}</div></div></div></WalletProvider>; }
