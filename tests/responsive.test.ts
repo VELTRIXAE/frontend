@@ -1,0 +1,2 @@
+import { describe,expect,it } from "vitest"; import fs from "node:fs"; import path from "node:path";
+describe("responsive application",()=>{it("includes mobile navigation breakpoints",()=>{const css=fs.readFileSync(path.resolve("app/app/app.css"),"utf8");expect(css).toContain("@media(max-width:760px)");expect(css).toContain(".mobile-nav-toggle")});it("honors reduced motion preferences",()=>{const css=fs.readFileSync(path.resolve("app/globals.css"),"utf8");expect(css).toContain("prefers-reduced-motion")})});
