@@ -1,3 +1,4 @@
 "use client";
 import { AlertTriangle, RotateCcw } from "lucide-react"; import { useEffect } from "react"; import { Button } from "@/components/ui/button";
-export default function ErrorPage({error,reset}:{error:Error&{digest?:string};reset:()=>void}){useEffect(()=>{console.error("VELTRIXAE route error",error)},[error]);return <main className="fatal-state"><AlertTriangle/><h1>Something interrupted the interface.</h1><p>Your wallet and funds are unaffected. Retry the view or return to the dashboard.</p><Button onClick={reset}><RotateCcw/>Try again</Button>{error.digest&&<small>Reference: {error.digest}</small>}</main>}
+import { reportError } from "@/lib/telemetry";
+export default function ErrorPage({error,reset}:{error:Error&{digest?:string};reset:()=>void}){useEffect(()=>{reportError(error,{source:"route-error-boundary",digest:error.digest})},[error]);return <main className="fatal-state"><AlertTriangle/><h1>Something interrupted the interface.</h1><p>Your wallet and funds are unaffected. Retry the view or return to the dashboard.</p><Button onClick={reset}><RotateCcw/>Try again</Button>{error.digest&&<small>Reference: {error.digest}</small>}</main>}

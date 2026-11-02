@@ -1,5 +1,5 @@
 import { config } from "@/lib/config";
-import { marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, poolSchema, poolSnapshotSchema, preparedSwapSchema, quoteRequestSchema, quoteSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type QuoteRequest } from "./schemas";
+import { assetDetailSchema, assetSearchResponseSchema, indexedAnalyticsSchema, marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, pairDetailSchema, poolSchema, poolSnapshotSchema, preparedSwapSchema, quoteRequestSchema, quoteSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type AssetSearchQuery, type IndexedAnalyticsQuery, type QuoteRequest } from "./schemas";
 import { z } from "zod";
 
 const errorEnvelopeSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
@@ -10,16 +10,32 @@ export class ApiError extends Error {
   }
 }
 
+function createRequestId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit, retries = 1): Promise<T> {
   if (!config.apiUrl) throw new ApiError("VELTRIXAE API is not configured.", 503, "NOT_CONFIGURED");
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    const requestId = createRequestId();
     try {
       const timeout = AbortSignal.timeout(12_000);
       const signal = init?.signal ? AbortSignal.any([timeout, init.signal]) : timeout;
       const response = await fetch(new URL(`/api/v1/${path}`, config.apiUrl), {
         ...init,
-        headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
+        headers: { accept: "application/json", "x-request-id": requestId, ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
         signal,
         cache: "no-store",
       });
@@ -54,6 +70,20 @@ export const api = {
   transaction: (hash: string, signal?: AbortSignal) => request(`transactions/${encodeURIComponent(hash)}`, transactionStatusSchema, { signal }),
   network: (signal?: AbortSignal) => request("network/status", networkStatusSchema, { signal }),
   overview: (signal?: AbortSignal) => request("analytics/overview", overviewSchema, { signal }),
+  searchAssets: (query: AssetSearchQuery, signal?: AbortSignal) =>
+    request(
+      `assets${buildQuery({ q: query.q, code: query.code, issuer: query.issuer, contractId: query.contractId, verified: query.verified, cursor: query.cursor, limit: query.limit })}`,
+      assetSearchResponseSchema,
+      { signal },
+    ),
+  asset: (id: string, signal?: AbortSignal) => request(`assets/${encodeURIComponent(id)}`, assetDetailSchema, { signal }),
+  pair: (id: string, signal?: AbortSignal) => request(`pairs/${encodeURIComponent(id)}`, pairDetailSchema, { signal }),
+  indexedAnalytics: (query: IndexedAnalyticsQuery, signal?: AbortSignal) =>
+    request(
+      `analytics/indexed${buildQuery({ window: query.window, from: query.from, to: query.to, asset: query.asset, pair: query.pair, pool: query.pool, granularity: query.granularity })}`,
+      indexedAnalyticsSchema,
+      { signal },
+    ),
 };
 
-export const apiSchemas = { tokenSchema, marketSchema };
+export const apiSchemas = { tokenSchema, marketSchema, assetDetailSchema, pairDetailSchema, indexedAnalyticsSchema };

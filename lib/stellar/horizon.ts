@@ -24,11 +24,54 @@ const transactionSchema = z.object({
 });
 const transactionsSchema = z.object({ _embedded: z.object({ records: z.array(transactionSchema) }) });
 const rootSchema = z.object({ core_latest_ledger: z.number(), history_latest_ledger: z.number(), network_passphrase: z.string() });
+const assetRecordSchema = z.object({
+  asset_type: z.string(),
+  asset_code: z.string().optional(),
+  asset_issuer: z.string().optional(),
+  contract_id: z.string().optional(),
+  num_accounts: z.number().optional(),
+  amount: z.string().optional(),
+  flags: z
+    .object({
+      auth_required: z.boolean().optional(),
+      auth_revocable: z.boolean().optional(),
+      auth_immutable: z.boolean().optional(),
+      auth_clawback_enabled: z.boolean().optional(),
+    })
+    .optional(),
+  toml: z.string().optional(),
+});
+const assetsSchema = z.object({ _embedded: z.object({ records: z.array(assetRecordSchema) }) });
+const tradeRecordSchema = z.object({
+  id: z.string(),
+  ledger_close_time: z.string(),
+  base_asset_type: z.string(),
+  base_asset_code: z.string().optional(),
+  base_asset_issuer: z.string().optional(),
+  counter_asset_type: z.string(),
+  counter_asset_code: z.string().optional(),
+  counter_asset_issuer: z.string().optional(),
+  base_amount: z.string(),
+  counter_amount: z.string(),
+  trade_type: z.string().optional(),
+});
+const tradesSchema = z.object({ _embedded: z.object({ records: z.array(tradeRecordSchema) }) });
 
 export type HorizonBalance = z.infer<typeof balanceSchema>;
 export type HorizonTransaction = z.infer<typeof transactionSchema>;
+export type HorizonAssetRecord = z.infer<typeof assetRecordSchema>;
+export type HorizonTradeRecord = z.infer<typeof tradeRecordSchema>;
 export type StellarAccount = z.infer<typeof accountSchema> & { transactions: HorizonTransaction[] };
 export type NetworkHealth = z.infer<typeof rootSchema> & { latencyMs: number };
+
+/** Explicit "we cannot supply this" result, so callers never render missing data as zero. */
+export type HorizonUnavailable = {
+  available: false;
+  reason: "not-supported" | "not-found" | "upstream-error";
+  message: string;
+};
+export type HorizonAvailable<T> = { available: true; data: T; indexedAt: string; latestLedger: number };
+export type HorizonResult<T> = HorizonAvailable<T> | HorizonUnavailable;
 
 export class HorizonError extends Error { constructor(message: string, public status: number) { super(message); } }
 async function horizonRequest<T>(path: string, schema: z.ZodType<T>): Promise<T> {
@@ -53,3 +96,113 @@ export async function getNetworkHealth(): Promise<NetworkHealth> {
   return { ...root, latencyMs: Math.round(performance.now() - start) };
 }
 export function assetCode(balance: HorizonBalance) { return balance.asset_type === "native" ? "XLM" : balance.asset_code ?? "Unknown"; }
+
+function unavailableFromError(error: unknown): HorizonUnavailable {
+  if (error instanceof HorizonError) {
+    if (error.status === 404) return { available: false, reason: "not-found", message: error.message };
+    return { available: false, reason: "upstream-error", message: error.message };
+  }
+  return { available: false, reason: "upstream-error", message: "Stellar Horizon could not be reached." };
+}
+
+async function latestLedger(): Promise<number> {
+  const root = await horizonRequest("/", rootSchema);
+  return root.history_latest_ledger;
+}
+
+/**
+ * Search Horizon's asset index by code, issuer, or contract ID.
+ * Horizon does not expose a contract-id filter, so contract matches are resolved client-side
+ * from the returned records; when nothing matches we report an explicit unavailable state.
+ */
+export async function searchHorizonAssets(query: {
+  code?: string;
+  issuer?: string;
+  contractId?: string;
+  limit?: number;
+}): Promise<HorizonResult<HorizonAssetRecord[]>> {
+  const params = new URLSearchParams({ order: "desc", limit: String(Math.min(Math.max(query.limit ?? 20, 1), 200)) });
+  if (query.code) params.set("asset_code", query.code);
+  if (query.issuer) params.set("asset_issuer", query.issuer);
+  try {
+    const [assets, ledger] = await Promise.all([
+      horizonRequest(`/assets?${params.toString()}`, assetsSchema),
+      latestLedger(),
+    ]);
+    let records = assets._embedded.records;
+    if (query.contractId) {
+      const needle = query.contractId.toLowerCase();
+      records = records.filter((record) => record.contract_id?.toLowerCase() === needle);
+    }
+    if (records.length === 0) {
+      return { available: false, reason: "not-found", message: "No verified assets matched this search." };
+    }
+    return { available: true, data: records, indexedAt: new Date().toISOString(), latestLedger: ledger };
+  } catch (error) {
+    return unavailableFromError(error);
+  }
+}
+
+/** Fetch a single asset record by code + issuer (or native XLM). */
+export async function getHorizonAsset(code: string, issuer?: string): Promise<HorizonResult<HorizonAssetRecord>> {
+  const params = new URLSearchParams({ asset_code: code });
+  if (issuer) params.set("asset_issuer", issuer);
+  try {
+    const [assets, ledger] = await Promise.all([
+      horizonRequest(`/assets?${params.toString()}&limit=1`, assetsSchema),
+      latestLedger(),
+    ]);
+    const record = assets._embedded.records[0];
+    if (!record) return { available: false, reason: "not-found", message: "This asset is not indexed by Horizon." };
+    return { available: true, data: record, indexedAt: new Date().toISOString(), latestLedger: ledger };
+  } catch (error) {
+    return unavailableFromError(error);
+  }
+}
+
+/** Recent trades for a pair, used for volume series. Empty history is reported as unavailable, not zero. */
+export async function getHorizonTrades(
+  base: { code: string; issuer?: string },
+  counter: { code: string; issuer?: string },
+  limit = 50,
+): Promise<HorizonResult<HorizonTradeRecord[]>> {
+  const params = new URLSearchParams({
+    order: "desc",
+    limit: String(Math.min(Math.max(limit, 1), 200)),
+    base_asset_type: base.issuer ? "credit_alphanum4" : "native",
+    counter_asset_type: counter.issuer ? "credit_alphanum4" : "native",
+  });
+  if (base.issuer) {
+    params.set("base_asset_code", base.code);
+    params.set("base_asset_issuer", base.issuer);
+  }
+  if (counter.issuer) {
+    params.set("counter_asset_code", counter.code);
+    params.set("counter_asset_issuer", counter.issuer);
+  }
+  try {
+    const [trades, ledger] = await Promise.all([
+      horizonRequest(`/trades?${params.toString()}`, tradesSchema),
+      latestLedger(),
+    ]);
+    const records = trades._embedded.records;
+    if (records.length === 0) {
+      return { available: false, reason: "not-found", message: "No trade history is available for this pair." };
+    }
+    return { available: true, data: records, indexedAt: new Date().toISOString(), latestLedger: ledger };
+  } catch (error) {
+    return unavailableFromError(error);
+  }
+}
+
+/**
+ * Horizon does not expose historical liquidity-pool or token-performance series.
+ * Callers must render an unavailable state rather than a zeroed chart.
+ */
+export function getHistoricalMetricAvailability(metric: "liquidity" | "token-performance" | "pools"): HorizonUnavailable {
+  return {
+    available: false,
+    reason: "not-supported",
+    message: `Horizon does not provide a historical ${metric} series for this network.`,
+  };
+}
