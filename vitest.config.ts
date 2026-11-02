@@ -6,7 +6,13 @@ export default defineConfig({
   plugins: [react()],
   test: {
     include: ["tests/**/*.{test,spec}.{ts,tsx}"],
-    exclude: ["node_modules/**", ".next/**", "veltrixae-contracts/**"],
+    exclude: [
+      "node_modules/**",
+      ".next/**",
+      "veltrixae-contracts/**",
+      "tests/e2e/**",
+      "**/*.e2e.{test,spec}.{ts,tsx}",
+    ],
     environment: "jsdom",
     globals: true,
     setupFiles: ["./tests/setup.ts"],

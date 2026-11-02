@@ -7,3 +7,66 @@ Amounts are integer base-unit strings; timestamps are Unix milliseconds. Token l
 Requests time out after 12 seconds. Obsolete quote requests are aborted. Safe reads can retry transient server/network failures once; POST requests are not retried. Backend `{error:{code,message}}` envelopes are preserved in `ApiError`.
 
 The API never receives signed transaction envelopes. After Freighter signs, the frontend submits directly to the configured Stellar RPC. The current backend documentation states quotes are `executable: false` until verified deployments exist, so signing remains disabled in that state.
+
+## Request-ID correlation
+
+Every backend response must include an `X-Request-Id` header (and echo the same value in the `{error:{code,message,requestId}}` envelope on failures). The frontend captures this identifier and attaches it to client-side error reports so a frontend error can be traced to the originating backend request. Backend services must propagate the inbound `X-Request-Id` through internal calls and logs; if a request arrives without one, the backend generates a fresh identifier and returns it. Telemetry must never include wallet addresses, signed XDR, or other sensitive account data — only the request identifier and non-sensitive context.
+
+## Asset explorer API
+
+The asset explorer consumes versioned asset and pair endpoints. Responses are versioned via an explicit `schemaVersion` field; clients reject unknown major versions rather than guessing.
+
+- `GET /api/v1/assets?q=<query>&limit=&cursor=` — search by asset code, issuer account, or contract ID. Duplicate codes are returned as distinct records keyed by `(code, issuer)` or contract ID; the client must never merge records that share a code but differ by issuer or contract.
+- `GET /api/v1/assets/{assetKey}` — asset detail including issuer details, verification provenance, and supported trading pairs.
+- `GET /api/v1/assets/{assetKey}/pairs` — trading pairs and available pools with liquidity where indexed.
+
+Each asset record includes a `verification` object: `{ status: "verified" | "unverified" | "unknown", provenanceUrl, verifiedAt }`. Verification badges link to `provenanceUrl`; when provenance is absent the badge renders an explicit unknown state rather than implying verification. Historical charts are rendered only when the response includes a supported history series; otherwise the UI shows an unavailable state. Search and detail routes must remain keyboard and screen-reader accessible (labelled inputs, focus management, and announced result counts).
+
+## Analytics API
+
+Analytics responses are versioned (`schemaVersion`) and pass the existing analytics schemas or their versioned replacements. Each metric series declares its aggregation window (`window`: e.g. `1h`, `24h`, `7d`), the metric formula identifier, and freshness metadata:
+
+- `sourceLedger` — the latest ledger included in the aggregation.
+- `indexedAt` — Unix milliseconds when the indexer produced the response.
+- `coverage` — `{ complete: boolean, gaps: [{ from, to }] }` describing any ledger ranges not yet indexed.
+
+Volume, liquidity, transaction count, and token performance series follow the same envelope. Partial indexing and gaps are surfaced explicitly: the UI displays the time range and freshness for every chart, and missing data is rendered as an unavailable state — never as zero. When `coverage.complete` is false, charts annotate the gap rather than interpolating across it. Metric formulas are documented alongside their identifiers and covered by fixture-based tests so calculations remain stable across changes.
+## Published contract
+
+The versioned backend contract is published as machine-readable OpenAPI documentation at `/api/v1/openapi.json` (served from the backend origin). It is the single source of truth for every endpoint used by `lib/api/client.ts`:
+
+- **Assets** — `GET /api/v1/tokens`, `GET /api/v1/tokens/{id}`
+- **Pools** — `GET /api/v1/pools`, `GET /api/v1/pools/{id}`
+- **Markets** — `GET /api/v1/markets`
+- **Portfolio** — `GET /api/v1/portfolio`
+- **Analytics** — `GET /api/v1/analytics/overview`
+- **Quote** — `POST /api/v1/quote`
+- **Build** — `POST /api/v1/swap/prepare`
+- **Submit** — `GET /api/v1/transactions/{hash}`
+- **Network** — `GET /api/v1/network/status`
+
+Every endpoint listed above is documented in the OpenAPI contract and available on Testnet. Contract fixtures under `contracts/fixtures/` validate against the frontend Zod schemas; invalid responses fail the contract tests.
+
+## Authentication
+
+Public read endpoints (assets, pools, markets, portfolio, analytics, network status, transaction status) require no credentials. Write endpoints (`POST /api/v1/quote`, `POST /api/v1/swap/prepare`) accept an optional bearer token via `Authorization: Bearer <token>`; when the backend enforces authentication, unauthenticated requests receive `401` with the standard error envelope.
+
+## Pagination
+
+List endpoints (`tokens`, `pools`, `markets`) accept `limit` (default `20`, max `100`) and `cursor` query parameters and return a `nextCursor` field (`null` when exhausted). Cursors are opaque strings; clients must not parse them.
+
+## Error envelopes
+
+All non-2xx responses use the envelope `{ "error": { "code": string, "message": string, "requestId": string } }`. The frontend preserves this envelope in `ApiError`. `code` is a stable machine-readable identifier; `message` is human-readable and may change.
+
+## Rate limits
+
+The backend enforces per-client rate limits and returns `429` with `Retry-After` (seconds) and the standard error envelope when exceeded. Clients should honor `Retry-After` and avoid retrying write requests.
+
+## Request identifiers
+
+Clients may send an `X-Request-Id` header; the backend echoes it (or generates one) in the `X-Request-Id` response header and in the error envelope's `requestId` field for correlation.
+
+## No fabricated data
+
+No frontend fallback fabricates missing financial data. When the backend omits prices, history, or other financial fields, the frontend surfaces them as unavailable rather than substituting synthetic values.
