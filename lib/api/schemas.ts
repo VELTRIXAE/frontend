@@ -242,6 +242,82 @@ export const analyticsResponseSchema = z.object({
 });
 export type AnalyticsResponse = z.infer<typeof analyticsResponseSchema>;
 
+export const assetIdentitySchema = z.object({
+  code: z.string().min(1).max(32),
+  issuer: z.string().min(1).nullable(),
+  contract: z.string().min(1),
+});
+export type AssetIdentity = z.infer<typeof assetIdentitySchema>;
+
+export const priceSourceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  url: z.string().url(),
+  documentation: z.string().url(),
+});
+export type PriceSource = z.infer<typeof priceSourceSchema>;
+
+const priceAmount = z.string().regex(/^\d+(\.\d+)?$/, "Expected a positive decimal price.");
+
+export const assetPriceSchema = z.object({
+  asset: assetIdentitySchema,
+  priceUsd: priceAmount,
+  source: priceSourceSchema,
+  observedAt: unixMilliseconds,
+  stale: z.boolean(),
+});
+export type AssetPrice = z.infer<typeof assetPriceSchema>;
+
+export const unavailablePriceSchema = z.object({
+  asset: assetIdentitySchema,
+  reason: z.enum(["no-source", "no-data", "stale", "invalid-response"]),
+  source: priceSourceSchema.nullable(),
+  observedAt: unixMilliseconds.nullable(),
+});
+export type UnavailablePrice = z.infer<typeof unavailablePriceSchema>;
+
+export const priceEntrySchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("available"), price: assetPriceSchema }),
+  z.object({ status: z.literal("unavailable"), unavailable: unavailablePriceSchema }),
+]);
+export type PriceEntry = z.infer<typeof priceEntrySchema>;
+
+export const pricesResponseSchema = z.object({
+  network: z.literal("testnet"),
+  source: priceSourceSchema,
+  fetchedAt: unixMilliseconds,
+  maxAgeMs: z.number().int().positive(),
+  prices: z.array(priceEntrySchema),
+});
+export type PricesResponse = z.infer<typeof pricesResponseSchema>;
+
+export const portfolioPointSchema = z.object({
+  timestamp: unixMilliseconds,
+  totalUsd: priceAmount.nullable(),
+  pricedAssets: z.number().int().nonnegative(),
+  unpricedAssets: z.number().int().nonnegative(),
+});
+export type PortfolioPoint = z.infer<typeof portfolioPointSchema>;
+
+export const portfolioHistorySchema = z.object({
+  network: z.literal("testnet"),
+  source: priceSourceSchema,
+  from: unixMilliseconds,
+  to: unixMilliseconds,
+  intervalMs: z.number().int().positive(),
+  points: z.array(portfolioPointSchema),
+  missingIntervals: z.array(z.object({ from: unixMilliseconds, to: unixMilliseconds })),
+});
+export type PortfolioHistory = z.infer<typeof portfolioHistorySchema>;
+
+export function parsePricesResponse(input: unknown): PricesResponse {
+  return pricesResponseSchema.parse(input);
+}
+
+export function parsePortfolioHistory(input: unknown): PortfolioHistory {
+  return portfolioHistorySchema.parse(input);
+}
+
 export const networkStatusSchema = z.object({ network: z.literal("testnet"), sequence: z.number().int(), closeTime: z.string(), soroswapConfigured: z.boolean(), veltrixaeConfigured: z.boolean() });
 export const overviewSchema = z.object({
   network: z.literal("testnet"), ledger: z.number().int(), observedAt: unixMilliseconds, poolCount: z.number().int(), tokenCount: z.number().int(), protocols: z.array(z.string()),

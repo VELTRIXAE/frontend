@@ -1,4 +1,5 @@
 import { config } from "@/lib/config";
+import { marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, poolSchema, poolSnapshotSchema, portfolioHistoryResponseSchema, preparedSwapSchema, priceSnapshotSchema, quoteRequestSchema, quoteSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type QuoteRequest } from "./schemas";
 import { assetDetailSchema, assetSearchResponseSchema, indexedAnalyticsSchema, marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, pairDetailSchema, poolSchema, poolSnapshotSchema, preparedSwapSchema, quoteRequestSchema, quoteSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type AssetSearchQuery, type IndexedAnalyticsQuery, type QuoteRequest } from "./schemas";
 import { buildResponseSchema, errorEnvelopeSchema, marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, poolSchema, poolSnapshotSchema, portfolioSchema, preparedSwapSchema, quoteRequestSchema, quoteSchema, submitResponseSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type QuoteRequest } from "./schemas";
 import { z } from "zod";
@@ -79,6 +80,11 @@ export const api = {
   transaction: (hash: string, signal?: AbortSignal) => request(`transactions/${encodeURIComponent(hash)}`, transactionStatusSchema, { signal }),
   network: (signal?: AbortSignal) => request("network/status", networkStatusSchema, { signal }),
   overview: (signal?: AbortSignal) => request("analytics/overview", overviewSchema, { signal }),
+  prices: (signal?: AbortSignal) => request("prices", priceSnapshotSchema, { signal }),
+  portfolioHistory: (signal?: AbortSignal) => request("portfolio/history", portfolioHistoryResponseSchema, { signal }),
+};
+
+export const apiSchemas = { tokenSchema, marketSchema, priceSnapshotSchema, portfolioHistoryResponseSchema };
   searchAssets: (query: AssetSearchQuery, signal?: AbortSignal) =>
     request(
       `assets${buildQuery({ q: query.q, code: query.code, issuer: query.issuer, contractId: query.contractId, verified: query.verified, cursor: query.cursor, limit: query.limit })}`,
