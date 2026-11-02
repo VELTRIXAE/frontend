@@ -1,11 +1,10 @@
 import { config } from "@/lib/config";
 import { assetDetailSchema, assetSearchResponseSchema, indexedAnalyticsSchema, marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, pairDetailSchema, poolSchema, poolSnapshotSchema, preparedSwapSchema, quoteRequestSchema, quoteSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type AssetSearchQuery, type IndexedAnalyticsQuery, type QuoteRequest } from "./schemas";
+import { buildResponseSchema, errorEnvelopeSchema, marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, poolSchema, poolSnapshotSchema, portfolioSchema, preparedSwapSchema, quoteRequestSchema, quoteSchema, submitResponseSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type QuoteRequest } from "./schemas";
 import { z } from "zod";
 
-const errorEnvelopeSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
-
 export class ApiError extends Error {
-  constructor(message: string, public status: number, public code = "API_ERROR", public retryable = false) {
+  constructor(message: string, public status: number, public code = "API_ERROR", public retryable = false, public requestId?: string) {
     super(message); this.name = "ApiError";
   }
 }
@@ -27,6 +26,7 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
 
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit, retries = 1): Promise<T> {
   if (!config.apiUrl) throw new ApiError("VELTRIXAE API is not configured.", 503, "NOT_CONFIGURED");
+  const requestId = createRequestId();
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const requestId = createRequestId();
@@ -39,13 +39,20 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
         signal,
         cache: "no-store",
       });
+      const responseRequestId = response.headers.get("x-request-id") ?? requestId;
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) {
         const parsedError = errorEnvelopeSchema.safeParse(body);
-        throw new ApiError(parsedError.success ? parsedError.data.error.message : `Request failed (${response.status}).`, response.status, parsedError.success ? parsedError.data.error.code : "API_ERROR", response.status >= 500);
+        throw new ApiError(
+          parsedError.success ? parsedError.data.error.message : `Request failed (${response.status}).`,
+          response.status,
+          parsedError.success ? parsedError.data.error.code : "API_ERROR",
+          response.status >= 500,
+          parsedError.success ? parsedError.data.error.requestId ?? responseRequestId : responseRequestId,
+        );
       }
       const parsed = schema.safeParse(body);
-      if (!parsed.success) throw new ApiError("The API returned an invalid response.", 502, "INVALID_RESPONSE");
+      if (!parsed.success) throw new ApiError("The API returned an invalid response.", 502, "INVALID_RESPONSE", false, responseRequestId);
       return parsed.data;
     } catch (error) {
       lastError = error;
@@ -56,8 +63,8 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
     }
   }
   if (lastError instanceof ApiError) throw lastError;
-  if (lastError instanceof DOMException && lastError.name === "TimeoutError") throw new ApiError("The VELTRIXAE API timed out.", 504, "REQUEST_TIMEOUT", true);
-  throw new ApiError("The VELTRIXAE API could not be reached.", 503, "API_UNAVAILABLE", true);
+  if (lastError instanceof DOMException && lastError.name === "TimeoutError") throw new ApiError("The VELTRIXAE API timed out.", 504, "REQUEST_TIMEOUT", true, requestId);
+  throw new ApiError("The VELTRIXAE API could not be reached.", 503, "API_UNAVAILABLE", true, requestId);
 }
 
 export const api = {
@@ -66,6 +73,8 @@ export const api = {
   pool: (id: string, signal?: AbortSignal) => request(`pools/${encodeURIComponent(id)}`, z.object({ pool: poolSchema }), { signal }),
   quote: (payload: QuoteRequest, signal?: AbortSignal) => request("quotes", quoteSchema, { method: "POST", body: JSON.stringify(quoteRequestSchema.parse(payload)), signal }, 0),
   prepareSwap: (payload: QuoteRequest, publicKey: string, signal?: AbortSignal) => request("swaps/prepare", preparedSwapSchema, { method: "POST", body: JSON.stringify({ quote: quoteRequestSchema.parse(payload), publicKey }), signal }, 0),
+  buildSwap: (payload: QuoteRequest, publicKey: string, signal?: AbortSignal) => request("swaps/build", buildResponseSchema, { method: "POST", body: JSON.stringify({ quote: quoteRequestSchema.parse(payload), publicKey }), signal }, 0),
+  submitSwap: (signedXdr: string, quoteId: string, signal?: AbortSignal) => request("swaps/submit", submitResponseSchema, { method: "POST", body: JSON.stringify({ signedXdr, quoteId }), signal }, 0),
   markets: (signal?: AbortSignal) => request("markets", marketsResponseSchema, { signal }),
   transaction: (hash: string, signal?: AbortSignal) => request(`transactions/${encodeURIComponent(hash)}`, transactionStatusSchema, { signal }),
   network: (signal?: AbortSignal) => request("network/status", networkStatusSchema, { signal }),
@@ -84,6 +93,7 @@ export const api = {
       indexedAnalyticsSchema,
       { signal },
     ),
+  portfolio: (publicKey: string, signal?: AbortSignal) => request(`portfolio/${encodeURIComponent(publicKey)}`, portfolioSchema, { signal }),
 };
 
 export const apiSchemas = { tokenSchema, marketSchema, assetDetailSchema, pairDetailSchema, indexedAnalyticsSchema };

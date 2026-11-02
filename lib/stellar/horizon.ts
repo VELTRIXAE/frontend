@@ -56,6 +56,12 @@ const tradeRecordSchema = z.object({
   trade_type: z.string().optional(),
 });
 const tradesSchema = z.object({ _embedded: z.object({ records: z.array(tradeRecordSchema) }) });
+const transactionStatusSchema = z.object({
+  hash: z.string(),
+  ledger: z.number(),
+  successful: z.boolean(),
+  created_at: z.string(),
+});
 
 export type HorizonBalance = z.infer<typeof balanceSchema>;
 export type HorizonTransaction = z.infer<typeof transactionSchema>;
@@ -63,6 +69,13 @@ export type HorizonAssetRecord = z.infer<typeof assetRecordSchema>;
 export type HorizonTradeRecord = z.infer<typeof tradeRecordSchema>;
 export type StellarAccount = z.infer<typeof accountSchema> & { transactions: HorizonTransaction[] };
 export type NetworkHealth = z.infer<typeof rootSchema> & { latencyMs: number };
+export type TransactionStatus = {
+  status: "success" | "failed";
+  ledger: number;
+  successful: boolean;
+  createdAt: string;
+  explorerUrl: string;
+};
 
 /** Explicit "we cannot supply this" result, so callers never render missing data as zero. */
 export type HorizonUnavailable = {
@@ -204,5 +217,17 @@ export function getHistoricalMetricAvailability(metric: "liquidity" | "token-per
     available: false,
     reason: "not-supported",
     message: `Horizon does not provide a historical ${metric} series for this network.`,
+export function explorerTransactionUrl(hash: string) {
+  return `${config.explorerUrl.replace(/\/$/, "")}/tx/${encodeURIComponent(hash)}`;
+}
+
+export async function getTransactionStatus(hash: string): Promise<TransactionStatus> {
+  const transaction = await horizonRequest(`/transactions/${encodeURIComponent(hash)}`, transactionStatusSchema);
+  return {
+    status: transaction.successful ? "success" : "failed",
+    ledger: transaction.ledger,
+    successful: transaction.successful,
+    createdAt: transaction.created_at,
+    explorerUrl: explorerTransactionUrl(transaction.hash),
   };
 }

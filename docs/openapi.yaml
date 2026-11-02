@@ -1,0 +1,964 @@
+openapi: 3.1.0
+info:
+  title: VELTRIXAE Backend API
+  version: 1.0.0
+  description: |
+    Versioned backend contract for the VELTRIXAE platform.
+
+    This document is the authoritative, machine-readable contract for every
+    endpoint consumed by `lib/api/client.ts`. Responses MUST validate against
+    the frontend Zod schemas; contract fixtures in `docs/fixtures/` are
+    validated against those schemas in CI. Invalid responses fail contract
+    tests.
+
+    ## Versioning
+    The API is versioned via the URL path prefix `/v1`. Breaking changes
+    require a new major version prefix. Additive, backward-compatible changes
+    may be made within a major version.
+
+    ## Authentication
+    All endpoints except `GET /v1/network/status` require a bearer token in
+    the `Authorization` header. Tokens are issued by the platform auth service
+    and are scoped to a single wallet/account.
+
+    ## Request identifiers
+    Every request SHOULD include an `X-Request-Id` header (a UUIDv4). If
+    omitted, the server generates one. The effective request identifier is
+    always returned in the `X-Request-Id` response header and in the error
+    envelope's `requestId` field.
+
+    ## Pagination
+    List endpoints use cursor-based pagination. Requests accept `limit`
+    (default 20, max 100) and `cursor` (opaque, from the previous response's
+    `nextCursor`). Responses include `items`, `nextCursor` (null when there
+    are no more pages), and `hasMore`.
+
+    ## Error envelope
+    All non-2xx responses use the standard error envelope:
+    ```json
+    {
+      "error": {
+        "code": "INVALID_REQUEST",
+        "message": "Human readable message",
+        "details": { "field": "reason" },
+        "requestId": "3f1c2a9e-..."
+      }
+    }
+    ```
+
+    ## Rate limits
+    Rate limits are applied per bearer token (or per IP for unauthenticated
+    endpoints). Limits are communicated via headers on every response:
+    `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+    (Unix epoch seconds). Exceeding a limit returns `429` with error code
+    `RATE_LIMITED` and a `Retry-After` header.
+
+    ## Testnet availability
+    Every endpoint in this document is deployed and available on Testnet.
+    The frontend MUST NOT fabricate financial data when an endpoint is
+    unavailable or returns an invalid response; it surfaces the error.
+  contact:
+    name: VELTRIXAE Platform Team
+servers:
+  - url: https://api.testnet.veltrixae.io/v1
+    description: Testnet
+  - url: https://api.veltrixae.io/v1
+    description: Mainnet
+security:
+  - bearerAuth: []
+tags:
+  - name: assets
+  - name: pools
+  - name: portfolio
+  - name: analytics
+  - name: quote
+  - name: build
+  - name: submit
+  - name: transactions
+  - name: network
+paths:
+  /assets:
+    get:
+      tags: [assets]
+      operationId: listAssets
+      summary: List supported assets
+      description: Returns the paginated list of assets supported by the platform.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: symbol
+          in: query
+          required: false
+          description: Filter by asset symbol (exact match).
+          schema:
+            type: string
+        - name: issuer
+          in: query
+          required: false
+          description: Filter by issuer account.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated list of assets.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /assets/{assetId}:
+    get:
+      tags: [assets]
+      operationId: getAsset
+      summary: Get a single asset
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Asset details.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /pools:
+    get:
+      tags: [pools]
+      operationId: listPools
+      summary: List liquidity pools
+      description: Returns the paginated list of liquidity pools.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: assetId
+          in: query
+          required: false
+          description: Filter pools containing the given asset.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated list of pools.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoolListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /pools/{poolId}:
+    get:
+      tags: [pools]
+      operationId: getPool
+      summary: Get a single pool
+      parameters:
+        - $ref: '#/components/parameters/PoolId'
+      responses:
+        '200':
+          description: Pool details.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pool'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /portfolio:
+    get:
+      tags: [portfolio]
+      operationId: getPortfolio
+      summary: Get portfolio for the authenticated account
+      description: |
+        Returns the portfolio (positions, balances, valuation) for the account
+        bound to the bearer token. Financial values are computed server-side;
+        the frontend never fabricates missing values.
+      parameters:
+        - name: account
+          in: query
+          required: false
+          description: Account to query. Defaults to the token's bound account.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Portfolio snapshot.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /analytics:
+    get:
+      tags: [analytics]
+      operationId: getAnalytics
+      summary: Get analytics for the authenticated account
+      description: |
+        Returns analytics (performance, allocation, historical series) for the
+        account bound to the bearer token.
+      parameters:
+        - name: account
+          in: query
+          required: false
+          description: Account to query. Defaults to the token's bound account.
+          schema:
+            type: string
+        - name: range
+          in: query
+          required: false
+          description: Time range for historical series.
+          schema:
+            type: string
+            enum: [24h, 7d, 30d, 90d, 1y, all]
+            default: 30d
+      responses:
+        '200':
+          description: Analytics snapshot.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analytics'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /quote:
+    post:
+      tags: [quote]
+      operationId: createQuote
+      summary: Request a swap quote
+      description: |
+        Returns a priced quote for a swap. Quotes are time-bounded; the
+        response includes `expiresAt`. The frontend must not compute or
+        substitute prices locally.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteRequest'
+      responses:
+        '200':
+          description: Priced quote.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /build:
+    post:
+      tags: [build]
+      operationId: buildTransaction
+      summary: Build an unsigned transaction from a quote
+      description: |
+        Builds an unsigned transaction envelope for the given quote. The
+        returned `xdr` must be signed client-side and submitted via `/submit`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildRequest'
+      responses:
+        '200':
+          description: Unsigned transaction envelope.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /submit:
+    post:
+      tags: [submit]
+      operationId: submitTransaction
+      summary: Submit a signed transaction
+      description: |
+        Submits a signed transaction envelope to the network. Returns the
+        transaction hash and initial status. Poll `/transactions/{hash}` for
+        status updates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitRequest'
+      responses:
+        '200':
+          description: Submission accepted.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /transactions/{hash}:
+    get:
+      tags: [transactions]
+      operationId: getTransactionStatus
+      summary: Get transaction status
+      description: Returns the current status of a submitted transaction.
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          description: Transaction hash.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction status.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /network/status:
+    get:
+      tags: [network]
+      operationId: getNetworkStatus
+      summary: Get network status
+      description: |
+        Returns the current network status, including the active network
+        (testnet/mainnet), ledger height, and service health. This endpoint is
+        unauthenticated.
+      security: []
+      responses:
+        '200':
+          description: Network status.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkStatus'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Bearer token issued by the platform auth service. Scoped to a single
+        wallet/account.
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of items to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque pagination cursor from a previous response's `nextCursor`.
+      schema:
+        type: string
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      description: Asset identifier.
+      schema:
+        type: string
+    PoolId:
+      name: poolId
+      in: path
+      required: true
+      description: Pool identifier.
+      schema:
+        type: string
+  headers:
+    X-Request-Id:
+      description: Effective request identifier (echoed or generated).
+      schema:
+        type: string
+        format: uuid
+    X-RateLimit-Limit:
+      description: Request limit for the current window.
+      schema:
+        type: integer
+    X-RateLimit-Remaining:
+      description: Remaining requests in the current window.
+      schema:
+        type: integer
+    X-RateLimit-Reset:
+      description: Unix epoch seconds when the current window resets.
+      schema:
+        type: integer
+    Retry-After:
+      description: Seconds to wait before retrying.
+      schema:
+        type: integer
+  responses:
+    BadRequest:
+      description: Malformed request.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: Missing or invalid credentials.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: Authenticated but not permitted to access the resource.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Resource not found.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: Request conflicts with current resource state (e.g. expired quote).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnprocessableEntity:
+      description: Request is well-formed but semantically invalid.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RateLimited:
+      description: Rate limit exceeded.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/X-RateLimit-Limit'
+        X-RateLimit-Remaining:
+          $ref: '#/components/headers/X-RateLimit-Remaining'
+        X-RateLimit-Reset:
+          $ref: '#/components/headers/X-RateLimit-Reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalError:
+      description: Internal server error.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code.
+              examples:
+                - INVALID_REQUEST
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - UNPROCESSABLE_ENTITY
+                - RATE_LIMITED
+                - INTERNAL_ERROR
+            message:
+              type: string
+              description: Human-readable error message.
+            details:
+              type: object
+              additionalProperties: true
+              description: Optional structured details (e.g. field-level errors).
+            requestId:
+              type: string
+              format: uuid
+              description: Request identifier for correlation.
+    Pagination:
+      type: object
+      required: [nextCursor, hasMore]
+      additionalProperties: false
+      properties:
+        nextCursor:
+          type: [string, 'null']
+          description: Cursor for the next page, or null when exhausted.
+        hasMore:
+          type: boolean
+          description: Whether more pages are available.
+    Asset:
+      type: object
+      required: [id, symbol, name, decimals, issuer, isNative]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        symbol:
+          type: string
+        name:
+          type: string
+        decimals:
+          type: integer
+          minimum: 0
+        issuer:
+          type: [string, 'null']
+        isNative:
+          type: boolean
+        priceUsd:
+          type: [string, 'null']
+          description: Decimal string; null when unavailable. Never fabricated.
+    AssetListResponse:
+      type: object
+      required: [items, nextCursor, hasMore]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+        nextCursor:
+          type: [string, 'null']
+        hasMore:
+          type: boolean
+    Pool:
+      type: object
+      required: [id, assetA, assetB, reserveA, reserveB, feeBps, tvlUsd]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        assetA:
+          type: string
+        assetB:
+          type: string
+        reserveA:
+          type: string
+          description: Decimal string.
+        reserveB:
+          type: string
+          description: Decimal string.
+        feeBps:
+          type: integer
+          minimum: 0
+        tvlUsd:
+          type: string
+          description: Decimal string.
+        apr:
+          type: [string, 'null']
+          description: Decimal string; null when unavailable.
+    PoolListResponse:
+      type: object
+      required: [items, nextCursor, hasMore]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pool'
+        nextCursor:
+          type: [string, 'null']
+        hasMore:
+          type: boolean
+    Position:
+      type: object
+      required: [assetId, quantity, valueUsd]
+      additionalProperties: false
+      properties:
+        assetId:
+          type: string
+        quantity:
+          type: string
+          description: Decimal string.
+        valueUsd:
+          type: string
+          description: Decimal string.
+        costBasisUsd:
+          type: [string, 'null']
+    Portfolio:
+      type: object
+      required: [account, totalValueUsd, positions, updatedAt]
+      additionalProperties: false
+      properties:
+        account:
+          type: string
+        totalValueUsd:
+          type: string
+          description: Decimal string.
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Position'
+        updatedAt:
+          type: string
+          format: date-time
+    AnalyticsPoint:
+      type: object
+      required: [timestamp, valueUsd]
+      additionalProperties: false
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        valueUsd:
+          type: string
+          description: Decimal string.
+    Analytics:
+      type: object
+      required: [account, range, series, allocation, updatedAt]
+      additionalProperties: false
+      properties:
+        account:
+          type: string
+        range:
+          type: string
+          enum: [24h, 7d, 30d, 90d, 1y, all]
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsPoint'
+        allocation:
+          type: array
+          items:
+            type: object
+            required: [assetId, weight]
+            additionalProperties: false
+            properties:
+              assetId:
+                type: string
+              weight:
+                type: string
+                description: Decimal string in [0,1].
+        updatedAt:
+          type: string
+          format: date-time
+    QuoteRequest:
+      type: object
+      required: [fromAssetId, toAssetId, amount, side]
+      additionalProperties: false
+      properties:
+        fromAssetId:
+          type: string
+        toAssetId:
+          type: string
+        amount:
+          type: string
+          description: Decimal string.
+        side:
+          type: string
+          enum: [sell, buy]
+        slippageBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+    Quote:
+      type: object
+      required:
+        - id
+        - fromAssetId
+        - toAssetId
+        - amountIn
+        - amountOut
+        - price
+        - slippageBps
+        - feeAmount
+        - expiresAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        fromAssetId:
+          type: string
+        toAssetId:
+          type: string
+        amountIn:
+          type: string
+          description: Decimal string.
+        amountOut:
+          type: string
+          description: Decimal string.
+        price:
+          type: string
+          description: Decimal string.
+        slippageBps:
+          type: integer
+        feeAmount:
+          type: string
+          description: Decimal string.
+        route:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+    BuildRequest:
+      type: object
+      required: [quoteId, account]
+      additionalProperties: false
+      properties:
+        quoteId:
+          type: string
+        account:
+          type: string
+    BuildResponse:
+      type: object
+      required: [xdr, networkPassphrase, expiresAt]
+      additionalProperties: false
+      properties:
+        xdr:
+          type: string
+          description: Base64-encoded unsigned transaction envelope.
+        networkPassphrase:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    SubmitRequest:
+      type: object
+      required: [xdr]
+      additionalProperties: false
+      properties:
+        xdr:
+          type: string
+          description: Base64-encoded signed transaction envelope.
+    SubmitResponse:
+      type: object
+      required: [hash, status]
+      additionalProperties: false
+      properties:
+        hash:
+          type: string
+        status:
+          $ref: '#/components/schemas/TransactionState'
+    TransactionState:
+      type: string
+      enum: [pending, success, failed, not_found]
+    TransactionStatus:
+      type: object
+      required: [hash, status, updatedAt]
+      additionalProperties: false
+      properties:
+        hash:
+          type: string
+        status:
+          $ref: '#/components/schemas/TransactionState'
+        ledger:
+          type: [integer, 'null']
+        error:
+          type: [string, 'null']
+        updatedAt:
+          type: string
+          format: date-time
+    NetworkStatus:
+      type: object
+      required: [network, healthy, ledgerHeight, updatedAt]
+      additionalProperties: false
+      properties:
+        network:
+          type: string
+          enum: [testnet, mainnet]
+        healthy:
+          type: boolean
+        ledgerHeight:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time

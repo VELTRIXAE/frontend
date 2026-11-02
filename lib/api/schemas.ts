@@ -58,12 +58,40 @@ export const poolSchema = z.object({
   reserve0: integerAmount, reserve1: integerAmount, feeBps: z.number().int().nonnegative(), ledger: z.number().int().nonnegative(), observedAt: unixMilliseconds,
 });
 export type Pool = z.infer<typeof poolSchema>;
-export const poolSnapshotSchema = z.object({ pools: z.array(poolSchema), ledger: z.number().int().nonnegative(), observedAt: unixMilliseconds });
-export const tokensResponseSchema = z.object({ tokens: z.array(tokenSchema) });
+
+// Shared response envelope metadata: request identifiers and cursor pagination.
+export const responseMetaSchema = z.object({
+  requestId: z.string().min(1).optional(),
+  nextCursor: z.string().min(1).nullable().optional(),
+  hasMore: z.boolean().optional(),
+});
+export type ResponseMeta = z.infer<typeof responseMetaSchema>;
+
+export const poolSnapshotSchema = z.object({
+  pools: z.array(poolSchema), ledger: z.number().int().nonnegative(), observedAt: unixMilliseconds,
+  requestId: z.string().min(1).optional(), nextCursor: z.string().min(1).nullable().optional(), hasMore: z.boolean().optional(),
+});
+export type PoolSnapshot = z.infer<typeof poolSnapshotSchema>;
+export const tokensResponseSchema = z.object({
+  tokens: z.array(tokenSchema),
+  requestId: z.string().min(1).optional(), nextCursor: z.string().min(1).nullable().optional(), hasMore: z.boolean().optional(),
+});
+export type TokensResponse = z.infer<typeof tokensResponseSchema>;
+
+// Contract registry metadata surfaced with quotes and prepared transactions.
+export const contractIdsSchema = z.object({
+  aggregator: z.string().min(1),
+  router: z.string().min(1).optional(),
+  factory: z.string().min(1).optional(),
+  veltrixae: z.string().min(1).optional(),
+});
+export type ContractIds = z.infer<typeof contractIdsSchema>;
 
 export const preparedSwapSchema = z.object({
   transactionXdr: z.string().min(1), resourceFee: integerAmount, totalFee: integerAmount, ledger: z.number().int().nonnegative(),
-  network: z.literal("testnet"), aggregator: z.string().min(1), quote: quoteSchema, requiresWalletSignature: z.literal(true), submitted: z.literal(false),
+  network: z.literal("testnet"), aggregator: z.string().min(1), contractIds: contractIdsSchema.optional(), quote: quoteSchema,
+  requiresWalletSignature: z.literal(true), submitted: z.literal(false),
+  requestId: z.string().min(1).optional(),
 });
 export type PreparedSwap = z.infer<typeof preparedSwapSchema>;
 
@@ -79,7 +107,11 @@ export const marketSchema = z.object({
   spotRatio: z.object({ numerator: integerAmount, denominator: integerAmount }), ratioUnits: z.string(),
 });
 export type Market = z.infer<typeof marketSchema>;
-export const marketsResponseSchema = z.object({ ledger: z.number().int(), observedAt: unixMilliseconds, markets: z.array(marketSchema) });
+export const marketsResponseSchema = z.object({
+  ledger: z.number().int(), observedAt: unixMilliseconds, markets: z.array(marketSchema),
+  requestId: z.string().min(1).optional(), nextCursor: z.string().min(1).nullable().optional(), hasMore: z.boolean().optional(),
+});
+export type MarketsResponse = z.infer<typeof marketsResponseSchema>;
 
 // --- Verified market & asset explorer (#16) ---
 
@@ -214,5 +246,58 @@ export const networkStatusSchema = z.object({ network: z.literal("testnet"), seq
 export const overviewSchema = z.object({
   network: z.literal("testnet"), ledger: z.number().int(), observedAt: unixMilliseconds, poolCount: z.number().int(), tokenCount: z.number().int(), protocols: z.array(z.string()),
   historicalVolume: z.null(), tvlUsd: z.null(), historyAvailable: z.literal(false),
+  requestId: z.string().min(1).optional(),
 });
 export type Overview = z.infer<typeof overviewSchema>;
+
+// Portfolio endpoint: on-chain balances only; no fabricated valuations.
+export const portfolioAssetSchema = z.object({
+  contract: z.string().min(1), symbol: z.string().min(1).max(32), decimals: z.number().int().min(0).max(18),
+  balance: integerAmount, ledger: z.number().int().nonnegative(),
+});
+export type PortfolioAsset = z.infer<typeof portfolioAssetSchema>;
+export const portfolioResponseSchema = z.object({
+  network: z.literal("testnet"), address: z.string().min(1), ledger: z.number().int().nonnegative(), observedAt: unixMilliseconds,
+  assets: z.array(portfolioAssetSchema), usdValue: z.null(), valuationAvailable: z.literal(false),
+  requestId: z.string().min(1).optional(), nextCursor: z.string().min(1).nullable().optional(), hasMore: z.boolean().optional(),
+});
+export type PortfolioResponse = z.infer<typeof portfolioResponseSchema>;
+
+// Analytics endpoint: historical data is only present when the backend provides it.
+export const analyticsPointSchema = z.object({
+  timestamp: unixMilliseconds, volumeUsd: z.number().nonnegative().nullable(), tvlUsd: z.number().nonnegative().nullable(),
+});
+export type AnalyticsPoint = z.infer<typeof analyticsPointSchema>;
+export const analyticsResponseSchema = z.object({
+  network: z.literal("testnet"), ledger: z.number().int().nonnegative(), observedAt: unixMilliseconds,
+  points: z.array(analyticsPointSchema), historyAvailable: z.boolean(),
+  requestId: z.string().min(1).optional(), nextCursor: z.string().min(1).nullable().optional(), hasMore: z.boolean().optional(),
+});
+export type AnalyticsResponse = z.infer<typeof analyticsResponseSchema>;
+
+// Quote endpoint response envelope.
+export const quoteResponseSchema = z.object({
+  quote: quoteSchema, requestId: z.string().min(1).optional(),
+});
+export type QuoteResponse = z.infer<typeof quoteResponseSchema>;
+
+// Submit endpoint: accepts a signed transaction XDR and returns the hash for reconciliation.
+export const submitRequestSchema = z.object({ signedTransactionXdr: z.string().min(1) });
+export type SubmitRequest = z.infer<typeof submitRequestSchema>;
+export const submitResponseSchema = z.object({
+  hash: z.string().regex(/^[a-fA-F0-9]{64}$/), network: z.literal("testnet"), status: z.enum(["PENDING", "SUCCESS", "FAILED"]),
+  explorerUrl: z.string().url(), requestId: z.string().min(1).optional(),
+});
+export type SubmitResponse = z.infer<typeof submitResponseSchema>;
+
+// Standard error envelope returned by every endpoint on failure.
+export const errorEnvelopeSchema = z.object({
+  error: z.object({
+    code: z.string().min(1),
+    message: z.string().min(1),
+    requestId: z.string().min(1),
+    retryable: z.boolean(),
+    details: z.record(z.unknown()).optional(),
+  }),
+});
+export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
