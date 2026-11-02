@@ -1,29 +1,22 @@
 # VELTRIXAE Frontend
-
-**Trade Beyond Boundaries.** VELTRIXAE is a premium, non-custodial decentralized trading interface for Stellar. This repository defaults to **Stellar Testnet**; Mainnet is intentionally not selectable.
-
-## Product mockups
-
-> Concept previews use placeholder values only. Live balances, routes, and transactions are always retrieved from configured Stellar services.
+VELTRIXAE is a non-custodial Stellar trading interface. This repository targets **Stellar Testnet only**; Mainnet is intentionally unavailable.
 
 ![VELTRIXAE desktop dashboard and swap mockup](docs/mockups/veltrixae-desktop.png)
 
-<p align="center">
-  <img src="docs/mockups/veltrixae-mobile.png" alt="VELTRIXAE mobile wallet and swap mockup" width="760" />
-</p>
+## Current status
 
-## Included
+| Feature | Status |
+| --- | --- |
+| Freighter connect, network detection, address, and signing | Implemented; mocked tests pass, live wallet not verified in this audit |
+| Horizon balances, recent transactions, and network health | Implemented with validated live Testnet reads |
+| Backend tokens, pools, markets, quotes, preparation, and status | Integrated against the published `/api/v1` contract |
+| Swap execution | Guarded implementation; unavailable while backend quotes are non-executable |
+| Pool and market discovery | Read-only, backed by verified factory snapshots |
+| Add/remove liquidity | Unavailable; no supported preparation API |
+| Portfolio quantities | Available from Horizon |
+| USD prices, LP positions, history, volume, and TVL | Unavailable without verified providers/indexers |
 
-- Responsive marketing site and application workspace
-- Freighter wallet access, network detection, disconnect, copy, and signing
-- Live aggregator quotes with route, rate, slippage, impact, deadline, and minimum received
-- Mandatory Stellar RPC simulation before wallet signing
-- Direct, validated Stellar Horizon balances, transactions, ledger health, and latency
-- Authorized Freighter session restoration and visibility-based account refresh
-- Pools, liquidity preview, portfolio, markets, transactions, and analytics interfaces
-- Zod-validated API responses with retry and explicit error states
-- Keyboard command palette (`Ctrl/⌘ + K`), route recovery, loading skeletons, and installable web manifest
-- Component, wallet, Horizon, schema, accessibility, and responsive tests with coverage gates
+The inspected backend documents no completed VELTRIXAE Testnet deployment and currently returns `executable: false` quotes. This frontend does not claim a successful live swap and does not substitute mock financial data.
 
 ## Development
 
@@ -31,51 +24,46 @@ Requires Node.js 22+ and pnpm 12.16.1.
 
 ```bash
 cp .env.example .env.local
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open <http://localhost:3000>. Codespaces forwards port 3000 automatically.
+Open <http://localhost:3000>.
 
 ## Environment
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `NEXT_PUBLIC_APP_URL` | Recommended | Canonical app URL |
-| `NEXT_PUBLIC_VELTRIXAE_API_URL` | Live data/actions | Validated API base URL |
-| `NEXT_PUBLIC_STELLAR_RPC_URL` | Yes | Soroban Testnet RPC |
-| `NEXT_PUBLIC_STELLAR_HORIZON_URL` | Yes | Horizon Testnet API |
-| `NEXT_PUBLIC_SWAP_CONTRACT_ID` | Swaps | Verified Testnet swap contract |
-| `NEXT_PUBLIC_FACTORY_CONTRACT_ID` | Liquidity | Verified Testnet factory contract |
+| `NEXT_PUBLIC_APP_URL` | Recommended | Canonical frontend URL |
+| `NEXT_PUBLIC_VELTRIXAE_API_URL` | For backend data | Backend origin; the client adds `/api/v1` |
+| `NEXT_PUBLIC_STELLAR_RPC_URL` | Optional | Defaults to Stellar Testnet RPC |
+| `NEXT_PUBLIC_STELLAR_HORIZON_URL` | Optional | Defaults to Testnet Horizon |
 
-Never provide private keys or recovery phrases. Wallet authorization stays in Freighter.
-
-## Backend contract
-
-The frontend does not assume unverified endpoints. A configured API must provide `GET /v1/assets`, `/v1/pools`, `/v1/portfolio/:account`, `/v1/analytics`; `POST /v1/swap/quote`, `/v1/swap/build`, and `/v1/transactions/submit`.
-
-Responses are validated in `lib/api/schemas.ts`. Missing pricing and history remain unavailable—never fabricated. A built XDR is independently simulated against Stellar Testnet RPC before signing.
+Never provide private keys or recovery phrases. All wallet authorization stays in Freighter. Signed envelopes are submitted directly to Stellar RPC, never to the VELTRIXAE backend.
 
 ## Verification
 
 ```bash
 pnpm lint
 pnpm typecheck
-pnpm test
+pnpm test:coverage
 pnpm build
 ```
 
-## Automation and dependency bots
+Wallet and backend tests are mocked unless explicitly documented as live. See [testing](docs/TESTING.md) and the [frontend audit](docs/FRONTEND_AUDIT.md).
 
-- Dependabot checks npm packages every day and GitHub Actions every week, grouping related Next.js, Stellar, testing, and production updates.
-- Frontend CI runs lint, strict type checking, coverage-gated tests, and a production build for every pull request and `main` push.
-- CodeQL scans JavaScript and TypeScript on changes and every Tuesday.
-- Dependency Review blocks pull requests that introduce dependencies with moderate-or-higher known vulnerabilities.
+## Documentation
 
-Repository settings should require the CI, CodeQL, and Dependency Review checks before merging to `main`.
+- [Architecture](docs/ARCHITECTURE.md)
+- [Frontend setup](docs/FRONTEND_SETUP.md)
+- [Wallet integration](docs/WALLET_INTEGRATION.md)
+- [Backend integration](docs/BACKEND_INTEGRATION.md)
+- [Testing](docs/TESTING.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 
 ## Deployment
 
-The app is prepared for Vercel but is not deployed automatically. Configure the environment, verify all Testnet contract IDs, and use your normal review flow. Keep Mainnet disabled until production contracts and operational controls are reviewed.
+For Vercel, import the repository, use Node.js 22 and pnpm, set the public environment variables, and deploy. Do not enable Mainnet or claim executable trading until backend readiness, contract identifiers, wallet review, RPC submission, and finality have been verified end to end.
 
 Licensed under the [MIT License](LICENSE).

@@ -6,8 +6,6 @@ const publicConfigSchema = z.object({
   rpcUrl: z.string().url(),
   horizonUrl: z.string().url(),
   network: z.literal("TESTNET"),
-  swapContractId: z.string().min(1).optional(),
-  factoryContractId: z.string().min(1).optional(),
 });
 
 export const config = publicConfigSchema.parse({
@@ -15,9 +13,6 @@ export const config = publicConfigSchema.parse({
   rpcUrl: process.env.NEXT_PUBLIC_STELLAR_RPC_URL || "https://soroban-testnet.stellar.org",
   horizonUrl: process.env.NEXT_PUBLIC_STELLAR_HORIZON_URL || "https://horizon-testnet.stellar.org",
   network: "TESTNET",
-  swapContractId: process.env.NEXT_PUBLIC_SWAP_CONTRACT_ID || undefined,
-  factoryContractId: process.env.NEXT_PUBLIC_FACTORY_CONTRACT_ID || undefined,
 });
 
 export const networkPassphrase = Networks.TESTNET;
-export const isTradingConfigured = Boolean(config.apiUrl && config.swapContractId);

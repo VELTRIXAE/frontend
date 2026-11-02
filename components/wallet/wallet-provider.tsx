@@ -7,7 +7,7 @@ const initial: WalletSnapshot = { status: "disconnected", address: null, network
 const WalletContext = createContext<WalletContextValue | null>(null);
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [wallet, setWallet] = useState(initial);
-  useEffect(() => { let active = true; readFreighterWallet().then(snapshot => { if (active) setWallet(snapshot); }); return () => { active = false; }; }, []);
+  useEffect(() => { let active = true; const refresh = () => { readFreighterWallet().then(snapshot => { if (active) setWallet(snapshot); }); }; refresh(); const onFocus = () => refresh(); window.addEventListener("focus", onFocus); document.addEventListener("visibilitychange", onFocus); return () => { active = false; window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); }; }, []);
   const connect = useCallback(async () => { setWallet({ ...initial, status: "connecting" }); setWallet(await connectFreighter()); }, []);
   const disconnect = useCallback(() => setWallet(initial), []);
   const value = useMemo(() => ({ ...wallet, connect, disconnect }), [wallet, connect, disconnect]);
