@@ -1,19 +1,89 @@
 import { z } from "zod";
 
-export const assetSchema = z.object({ code: z.string().min(1).max(32), issuer: z.string().optional(), name: z.string().optional(), decimals: z.number().int().min(0).max(18).default(7), verified: z.boolean().default(false), icon: z.string().url().optional() });
-export type Asset = z.infer<typeof assetSchema>;
-export const quoteRequestSchema = z.object({ sellAsset: assetSchema, buyAsset: assetSchema, amount: z.string().regex(/^\d+(\.\d+)?$/), slippageBps: z.number().int().min(1).max(500), account: z.string().optional() });
-export const quoteSchema = z.object({ id: z.string(), inputAmount: z.string(), outputAmount: z.string(), rate: z.string(), minimumReceived: z.string(), priceImpactPct: z.number(), route: z.array(z.object({ protocol: z.string(), poolId: z.string().optional(), sellAsset: z.string(), buyAsset: z.string() })).min(1), expiresAt: z.string().datetime(), transactionXdr: z.string().optional() });
-export type QuoteRequest = z.infer<typeof quoteRequestSchema>;
+const integerAmount = z.string().regex(/^\d+$/, "Expected an integer base-unit amount.");
+const unixMilliseconds = z.number().int().nonnegative();
+
+export const tokenSchema = z.object({
+  contract: z.string().min(1),
+  symbol: z.string().min(1).max(32),
+  name: z.string().min(1),
+  decimals: z.number().int().min(0).max(18),
+  asset: z.object({ code: z.string().min(1).max(32), issuer: z.string().optional() }).optional(),
+  verification: z.literal("onchain-metadata-only"),
+});
+export type Token = z.infer<typeof tokenSchema>;
+
+export const quoteRequestSchema = z.object({
+  tokenIn: z.string().min(1),
+  tokenOut: z.string().min(1),
+  amount: integerAmount,
+  kind: z.enum(["exactIn", "exactOut"]).default("exactIn"),
+  slippageBps: z.number().int().min(1).max(500).default(50),
+  maxHops: z.number().int().min(1).max(3).default(3),
+});
+export type QuoteRequest = z.input<typeof quoteRequestSchema>;
+
+export const routeSchema = z.object({
+  path: z.array(z.string().min(1)).min(2),
+  pools: z.array(z.string().min(1)).min(1),
+  protocol: z.literal("Soroswap"),
+  amountIn: integerAmount,
+  amountOut: integerAmount,
+  fees: z.array(z.object({ token: z.string().min(1), amount: integerAmount, feeBps: z.number().int().nonnegative() })),
+  priceImpactBps: z.number().int().nonnegative(),
+});
+
+export const quoteSchema = z.object({
+  network: z.literal("testnet"),
+  kind: z.enum(["exactIn", "exactOut"]),
+  tokenIn: z.string().min(1),
+  tokenOut: z.string().min(1),
+  amountIn: integerAmount,
+  amountOut: integerAmount,
+  minimumReceived: integerAmount,
+  maximumInput: integerAmount,
+  slippageBps: z.number().int().min(1).max(500),
+  routes: z.array(routeSchema).min(1),
+  selectedRoute: routeSchema,
+  ledger: z.number().int().nonnegative(),
+  observedAt: unixMilliseconds,
+  expiresAt: unixMilliseconds,
+  executable: z.boolean(),
+  networkFee: z.null(),
+});
 export type Quote = z.infer<typeof quoteSchema>;
-export const poolSchema = z.object({ id: z.string(), assetA: assetSchema, assetB: assetSchema, reserveA: z.string(), reserveB: z.string(), feeBps: z.number().int(), contractId: z.string(), tvlUsd: z.number().nullable().optional() });
+
+export const poolSchema = z.object({
+  id: z.string().min(1), protocol: z.literal("Soroswap"), token0: z.string().min(1), token1: z.string().min(1),
+  reserve0: integerAmount, reserve1: integerAmount, feeBps: z.number().int().nonnegative(), ledger: z.number().int().nonnegative(), observedAt: unixMilliseconds,
+});
 export type Pool = z.infer<typeof poolSchema>;
-export const transactionBuildSchema = z.object({ xdr: z.string().min(1), simulationId: z.string().min(1), expiresAt: z.string().datetime() });
-export const holdingSchema = z.object({ asset: assetSchema, balance: z.string(), valueUsd: z.number().nullable(), priceUsd: z.number().nullable() });
-export const positionSchema = z.object({ id: z.string(), poolId: z.string(), assetA: assetSchema, assetB: assetSchema, sharePct: z.number(), valueUsd: z.number().nullable() });
-export const transactionSchema = z.object({ hash: z.string(), type: z.string(), status: z.enum(["pending", "success", "failed"]), createdAt: z.string().datetime(), explorerUrl: z.string().url(), amount: z.string().optional(), asset: z.string().optional() });
-export const portfolioSchema = z.object({ totalValueUsd: z.number().nullable(), holdings: z.array(holdingSchema), positions: z.array(positionSchema), transactions: z.array(transactionSchema) });
-export type Portfolio = z.infer<typeof portfolioSchema>;
-export const metricPointSchema = z.object({ timestamp: z.string().datetime(), value: z.number() });
-export const analyticsSchema = z.object({ volume: z.array(metricPointSchema), liquidity: z.array(metricPointSchema), transactions: z.array(metricPointSchema), tokenPerformance: z.array(z.object({ asset: assetSchema, changePct: z.number().nullable(), priceUsd: z.number().nullable() })) });
-export type Analytics = z.infer<typeof analyticsSchema>;
+export const poolSnapshotSchema = z.object({ pools: z.array(poolSchema), ledger: z.number().int().nonnegative(), observedAt: unixMilliseconds });
+export const tokensResponseSchema = z.object({ tokens: z.array(tokenSchema) });
+
+export const preparedSwapSchema = z.object({
+  transactionXdr: z.string().min(1), resourceFee: integerAmount, totalFee: integerAmount, ledger: z.number().int().nonnegative(),
+  network: z.literal("testnet"), aggregator: z.string().min(1), quote: quoteSchema, requiresWalletSignature: z.literal(true), submitted: z.literal(false),
+});
+export type PreparedSwap = z.infer<typeof preparedSwapSchema>;
+
+export const transactionStatusSchema = z.object({
+  hash: z.string().regex(/^[a-fA-F0-9]{64}$/), network: z.literal("testnet"), status: z.enum(["SUCCESS", "FAILED", "NOT_FOUND"]), finalized: z.boolean(),
+  ledger: z.number().int().nullable(), latestLedger: z.number().int(), resultXdr: z.string().nullable(), metadataXdr: z.string().nullable(), failure: z.string().nullable(),
+  explorerUrl: z.string().url(), note: z.string().nullable(),
+});
+export type TransactionStatus = z.infer<typeof transactionStatusSchema>;
+
+export const marketSchema = z.object({
+  pool: z.string().min(1), protocol: z.literal("Soroswap"), token0: z.string().min(1), token1: z.string().min(1), feeBps: z.number().int().nonnegative(),
+  spotRatio: z.object({ numerator: integerAmount, denominator: integerAmount }), ratioUnits: z.string(),
+});
+export type Market = z.infer<typeof marketSchema>;
+export const marketsResponseSchema = z.object({ ledger: z.number().int(), observedAt: unixMilliseconds, markets: z.array(marketSchema) });
+
+export const networkStatusSchema = z.object({ network: z.literal("testnet"), sequence: z.number().int(), closeTime: z.string(), soroswapConfigured: z.boolean(), veltrixaeConfigured: z.boolean() });
+export const overviewSchema = z.object({
+  network: z.literal("testnet"), ledger: z.number().int(), observedAt: unixMilliseconds, poolCount: z.number().int(), tokenCount: z.number().int(), protocols: z.array(z.string()),
+  historicalVolume: z.null(), tvlUsd: z.null(), historyAvailable: z.literal(false),
+});
+export type Overview = z.infer<typeof overviewSchema>;
