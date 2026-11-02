@@ -14,41 +14,87 @@ The data boundaries are intentional:
 
 The transaction trust boundary is: quote → backend preparation with a fresh quote → frontend RPC simulation → user review/signing in Freighter → direct Stellar RPC submission → backend status polling. Private keys never enter the application or API.
 
-## Verified Stellar Testnet contract registry
+## Observability model
 
-All contracts used by swap and liquidity actions are recorded in a single reviewed registry, which is the source of truth for contract IDs. The registry covers:
+Observability is privacy-conscious and opt-in by environment. It has three layers:
 
-- the swap contract,
-- the factory contract,
-- the router contract,
-- every supported pool contract.
+- **Error monitoring**: uncaught errors and handled failures are reported to a monitoring sink. Reports are scrubbed before transmission (see below).
+- **Web-vitals reporting**: Core Web Vitals (LCP, INP, CLS, FCP, TTFB) are sampled and reported with route and release metadata only.
+- **Health and configuration signals**: backend health checks and environment/configuration validation failures are surfaced as observable events so misconfiguration is detected before it affects users.
 
-Each entry records:
+Telemetry is disabled unless a monitoring endpoint is configured for the environment. When disabled, reporting calls are no-ops and no data leaves the browser.
 
-- the contract ID,
-- the deployment ledger,
-- the source commit the deployment was built from,
-- the network passphrase the contract was deployed to,
-- the verification status (verified / unverified / deprecated).
+### Request-ID correlation
 
-Environment values (e.g. `NEXT_PUBLIC_*` contract ID variables) must reference entries that exist in the registry with a verified status and the Testnet network passphrase. Environment values that are missing, unverified, or deployed to a different network are treated as invalid.
+Every backend request carries a request identifier. The `lib/api` layer reads the backend-provided request ID from responses (and generates a client-side correlation ID when the backend does not supply one). That identifier is attached to:
 
-### Startup validation
+- the corresponding frontend error report, and
+- any health or configuration failure event tied to that request.
 
-At application startup the registry is validated:
+This lets an operator join a frontend error to the exact backend request and log line. Correlation IDs are opaque strings; they never contain wallet addresses, keys, or payload contents.
 
-- every contract ID is checked for well-formedness (Stellar contract address format),
-- every entry's network passphrase is checked against the expected Testnet passphrase,
-- environment-referenced contract IDs are checked against the registry and must resolve to a verified entry.
+### Privacy scrubbing
 
-Validation failures are surfaced as a startup error/diagnostic rather than silently falling back to a default contract.
+All telemetry passes through a scrubbing step before transmission. The following must never enter telemetry:
 
-### Write-action gating
+- wallet secrets, private keys, or seed phrases,
+- signed XDR or any transaction envelope,
+- sensitive account data (full account identifiers are redacted or omitted),
+- request/response bodies that could contain the above.
 
-Write actions (swap submission, liquidity add/remove, and any other transaction that targets a registry contract) are disabled unless the registry and environment resolve to verified Testnet deployments. When the registry is invalid, unverified, or points at the wrong network, the UI disables write actions and explains why; read-only views remain available. The transaction preview shows the contract metadata (contract ID, deployment ledger, source commit, network passphrase, verification status) for every contract the transaction touches, so the user can confirm they are interacting with a verified Testnet deployment before signing.
+Scrubbing is applied centrally so individual call sites cannot bypass it. Error messages and stack traces are retained only after redaction; arbitrary payloads are dropped rather than logged.
 
-### Review and rotation process
+## Mainnet readiness gate
 
-- **Review:** changes to the registry are reviewed like code. A new or updated entry must include the deployment ledger, source commit, and network passphrase, and must be confirmed against the deployed contract on Testnet before its status is set to verified.
-- **Rotation:** when a contract is redeployed or superseded, the new entry is added and verified, environment values are updated to reference it, and the old entry is marked deprecated (not deleted) so historical transactions remain traceable. Deprecated entries cannot be referenced by environment values for write actions.
-- **Wrong network / unverified:** any entry whose network passphrase does not match Testnet, or whose status is not verified, disables write actions until corrected.
+Mainnet is disabled by default. Enabling it requires an explicit build-time gate that cannot be satisfied accidentally:
+
+- A release flag must be set explicitly at build time.
+- Contract addresses must be verified for the target network.
+- If either condition is missing, the build fails or Mainnet remains disabled.
+
+The gate is evaluated at build time, not at runtime, so a misconfigured deployment cannot silently reach Mainnet. Testnet remains the default target.
+
+## Operational checklists
+
+### Release checklist
+
+- [ ] Environment validation passes (required variables present and well-formed).
+- [ ] Backend health check is green.
+- [ ] Contract addresses verified for the target network.
+- [ ] Mainnet release flag set only if Mainnet is intended and verified.
+- [ ] Release version/tag recorded.
+- [ ] Monitoring endpoint configured and receiving events.
+
+### Rollback checklist
+
+- [ ] Identify the last known-good release tag.
+- [ ] Redeploy the previous release.
+- [ ] Confirm health check and configuration validation are green.
+- [ ] Verify error and web-vitals reporting resumes normally.
+- [ ] Record the rollback reason and outcome.
+
+### Incident checklist
+
+- [ ] Acknowledge the alert and open an incident record.
+- [ ] Use request-ID correlation to locate the failing backend request.
+- [ ] Assess user impact and whether Mainnet is involved.
+- [ ] Apply mitigation (rollback or targeted fix).
+- [ ] Confirm recovery via health and error monitoring.
+- [ ] Write a post-incident summary.
+
+### Environment-validation checklist
+
+- [ ] All required environment variables are set.
+- [ ] Monitoring endpoint is valid or intentionally unset.
+- [ ] Network target is correct (Testnet by default).
+- [ ] Mainnet gate inputs (release flag, verified contracts) are consistent.
+- [ ] Configuration failures are observable in monitoring.
+
+### Incident contacts
+
+- **On-call engineer**: primary responder for alerts and rollbacks.
+- **Backend owner**: backend health, request-ID correlation, and API failures.
+- **Release owner**: approves releases and rollbacks; owns the Mainnet gate.
+- **Security contact**: wallet-secret or sensitive-data exposure concerns.
+
+Contact details are maintained in the private operations runbook and are not committed to this repository.

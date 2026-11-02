@@ -2,5 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "pnpm build",
-  "installCommand": "pnpm install --frozen-lockfile"
+  "installCommand": "pnpm install --frozen-lockfile",
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_STELLAR_NETWORK": "testnet",
+      "NEXT_PUBLIC_MAINNET_ENABLED": "false",
+      "MAINNET_RELEASE_FLAG": "false",
+      "MAINNET_CONTRACTS_VERIFIED": "false"
+    }
+  }
 }
