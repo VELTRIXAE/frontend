@@ -32,4 +32,43 @@ describe("VELTRIXAE API client", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ tokens: [{ symbol: "missing contract" }] })));
     await expect(api.tokens()).rejects.toMatchObject({ status: 502, code: "INVALID_RESPONSE" });
   });
+
+  it("validates pricing responses and propagates source and freshness", async () => {
+    const price = { asset: { code: "XLM", issuer: null, contract: "C_XLM" }, priceUsd: "0.1234", source: "coingecko", observedAt: 1_700_000_000, stale: false, available: true };
+    const fetchMock = vi.fn().mockResolvedValue(json({ prices: [price], source: "coingecko", fetchedAt: 1_700_000_005 })); vi.stubGlobal("fetch", fetchMock);
+    const result = await api.prices();
+    expect(result).toEqual({ prices: [price], source: "coingecko", fetchedAt: 1_700_000_005 });
+    expect(result.prices[0]).toMatchObject({ source: "coingecko", observedAt: 1_700_000_000, stale: false });
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://api.example/api/v1/prices");
+  });
+
+  it("preserves unavailable and stale price states", async () => {
+    const prices = [
+      { asset: { code: "TKN", issuer: "G_ISSUER", contract: "C_TOKEN" }, priceUsd: null, source: "coingecko", observedAt: null, stale: true, available: false },
+      { asset: { code: "XLM", issuer: null, contract: "C_XLM" }, priceUsd: "0.1", source: "coingecko", observedAt: 1, stale: true, available: true },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ prices, source: "coingecko", fetchedAt: 2 })));
+    const result = await api.prices();
+    expect(result.prices[0]).toMatchObject({ priceUsd: null, available: false, stale: true });
+    expect(result.prices[1]).toMatchObject({ priceUsd: "0.1", available: true, stale: true });
+  });
+
+  it("rejects invalid pricing payloads", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ prices: [{ asset: { code: "XLM" }, priceUsd: "0.1" }], source: "coingecko", fetchedAt: 1 })));
+    await expect(api.prices()).rejects.toMatchObject({ status: 502, code: "INVALID_RESPONSE" });
+  });
+
+  it("validates valuation history and preserves missing intervals", async () => {
+    const history = { points: [{ timestamp: 1, totalUsd: "100.5", pricedAssets: 2, unpricedAssets: ["C_TOKEN"] }, { timestamp: 2, totalUsd: null, pricedAssets: 0, unpricedAssets: ["C_TOKEN", "C_XLM"] }], source: "coingecko", fetchedAt: 3 };
+    const fetchMock = vi.fn().mockResolvedValue(json(history)); vi.stubGlobal("fetch", fetchMock);
+    const result = await api.valuationHistory();
+    expect(result).toEqual(history);
+    expect(result.points[1].totalUsd).toBeNull();
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://api.example/api/v1/valuation/history");
+  });
+
+  it("rejects invalid valuation history payloads", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ points: [{ timestamp: "bad", totalUsd: "1" }], source: "coingecko", fetchedAt: 1 })));
+    await expect(api.valuationHistory()).rejects.toMatchObject({ status: 502, code: "INVALID_RESPONSE" });
+  });
 });

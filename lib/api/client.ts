@@ -1,5 +1,5 @@
 import { config } from "@/lib/config";
-import { marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, poolSchema, poolSnapshotSchema, preparedSwapSchema, quoteRequestSchema, quoteSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type QuoteRequest } from "./schemas";
+import { marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, poolSchema, poolSnapshotSchema, portfolioHistoryResponseSchema, preparedSwapSchema, priceSnapshotSchema, quoteRequestSchema, quoteSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type QuoteRequest } from "./schemas";
 import { z } from "zod";
 
 const errorEnvelopeSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
@@ -54,6 +54,8 @@ export const api = {
   transaction: (hash: string, signal?: AbortSignal) => request(`transactions/${encodeURIComponent(hash)}`, transactionStatusSchema, { signal }),
   network: (signal?: AbortSignal) => request("network/status", networkStatusSchema, { signal }),
   overview: (signal?: AbortSignal) => request("analytics/overview", overviewSchema, { signal }),
+  prices: (signal?: AbortSignal) => request("prices", priceSnapshotSchema, { signal }),
+  portfolioHistory: (signal?: AbortSignal) => request("portfolio/history", portfolioHistoryResponseSchema, { signal }),
 };
 
-export const apiSchemas = { tokenSchema, marketSchema };
+export const apiSchemas = { tokenSchema, marketSchema, priceSnapshotSchema, portfolioHistoryResponseSchema };
