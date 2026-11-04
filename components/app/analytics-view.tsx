@@ -88,9 +88,6 @@ export function AnalyticsView() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setAnalytics(undefined);
-    setAnalyticsError("");
-    setUnsupported(false);
     api
       .analytics(window, controller.signal)
       .then(setAnalytics)
@@ -143,7 +140,12 @@ export function AnalyticsView() {
               key={option.id}
               type="button"
               aria-pressed={window === option.id}
-              onClick={() => setWindow(option.id)}
+              onClick={() => {
+                setAnalytics(undefined);
+                setAnalyticsError("");
+                setUnsupported(false);
+                setWindow(option.id);
+              }}
             >
               {option.label}
             </button>

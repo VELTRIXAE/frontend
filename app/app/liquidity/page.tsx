@@ -62,7 +62,6 @@ function computeAddPreview(pool: Pool, amountA: string, amountB: string): Previe
   const b = safeNumber(amountB);
 
   const ratio = reserveA > 0 ? reserveB / reserveA : 0;
-  const expectedB = a * ratio;
   const expectedA = ratio > 0 ? b / ratio : 0;
 
   const shareFromA = reserveA > 0 ? (a / reserveA) * totalShares : 0;
@@ -183,9 +182,9 @@ export default function LiquidityPage() {
   }, [selectedPoolId]);
 
   useEffect(() => {
-    void loadPools();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timer = window.setTimeout(() => void loadPools(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadPools]);
 
   const selectedPool = useMemo(
     () => pools.find((p) => p.id === selectedPoolId) ?? null,

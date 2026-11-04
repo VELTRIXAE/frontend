@@ -42,8 +42,6 @@ const liquidityPoolsSchema = z.object({ _embedded: z.object({ records: z.array(l
 export type HorizonBalance = z.infer<typeof balanceSchema>;
 export type HorizonTransaction = z.infer<typeof transactionSchema>;
 export type HorizonLiquidityPool = z.infer<typeof liquidityPoolSchema>;
-export type StellarAccount = z.infer<typeof accountSchema> & { transactions: HorizonTransaction[] };
-export type NetworkHealth = z.infer<typeof rootSchema> & { latencyMs: number };
 export type PoolReserve = { asset: string; amount: string };
 export type PoolDetails = {
   poolId: string;
@@ -95,13 +93,12 @@ const transactionStatusSchema = z.object({
   created_at: z.string(),
 });
 
-export type HorizonBalance = z.infer<typeof balanceSchema>;
-export type HorizonTransaction = z.infer<typeof transactionSchema>;
 export type HorizonAssetRecord = z.infer<typeof assetRecordSchema>;
 export type HorizonTradeRecord = z.infer<typeof tradeRecordSchema>;
 export type StellarAccount = z.infer<typeof accountSchema> & { transactions: HorizonTransaction[] };
 export type NetworkHealth = z.infer<typeof rootSchema> & { latencyMs: number };
 export type TransactionStatus = {
+  hash: string;
   status: "success" | "failed";
   ledger: number;
   successful: boolean;
@@ -212,6 +209,9 @@ export async function getPoolReservesAndShares(contractId: string): Promise<{
     totalShares: details.totalShares,
     totalTrustlines: details.totalTrustlines,
     feeBp: details.feeBp,
+  };
+}
+
 function unavailableFromError(error: unknown): HorizonUnavailable {
   if (error instanceof HorizonError) {
     if (error.status === 404) return { available: false, reason: "not-found", message: error.message };
@@ -319,6 +319,9 @@ export function getHistoricalMetricAvailability(metric: "liquidity" | "token-per
     available: false,
     reason: "not-supported",
     message: `Horizon does not provide a historical ${metric} series for this network.`,
+  };
+}
+
 export function explorerTransactionUrl(hash: string) {
   return `${config.explorerUrl.replace(/\/$/, "")}/tx/${encodeURIComponent(hash)}`;
 }
@@ -326,6 +329,7 @@ export function explorerTransactionUrl(hash: string) {
 export async function getTransactionStatus(hash: string): Promise<TransactionStatus> {
   const transaction = await horizonRequest(`/transactions/${encodeURIComponent(hash)}`, transactionStatusSchema);
   return {
+    hash: transaction.hash,
     status: transaction.successful ? "success" : "failed",
     ledger: transaction.ledger,
     successful: transaction.successful,

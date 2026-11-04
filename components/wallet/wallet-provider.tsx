@@ -1,71 +1,124 @@
 "use client";
+
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   getWalletAdapters,
-  readWallet,
-  connectWallet,
-  disconnectWallet,
-  subscribeWallet,
   toUserFacingError,
   type WalletAdapter,
   type WalletSnapshot,
 } from "@/lib/stellar/wallet";
 
 type WalletContextValue = WalletSnapshot & {
-  wallets: WalletAdapter[];
-  selectedWalletId: string | null;
-  selectWallet: (id: string) => void;
-  connect: () => Promise<void>;
-  disconnect: () => void;
-  error: string | null;
+  adapters: WalletAdapter[];
+  walletName: string | null;
+  connect: (id?: string) => Promise<void>;
+  disconnect: () => Promise<void>;
+  signTransaction: (xdr: string) => Promise<string>;
+  onAccountChange?: (listener: (address: string | null) => void) => () => void;
+  onNetworkChange?: (listener: (network: string | null) => void) => () => void;
+  error?: string;
 };
-const initial: WalletSnapshot = { status: "disconnected", address: null, network: null, correctNetwork: false };
-const WalletContext = createContext<WalletContextValue | null>(null);
-export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const wallets = useMemo(() => getWalletAdapters(), []);
-  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(() => wallets[0]?.id ?? null);
-  const [wallet, setWallet] = useState(initial);
-  const [error, setError] = useState<string | null>(null);
 
-  const selectWallet = useCallback((id: string) => {
-    setSelectedWalletId(id);
-    setError(null);
-    setWallet(initial);
-  }, []);
+const initial: WalletSnapshot = {
+  status: "disconnected",
+  connected: false,
+  address: null,
+  network: null,
+  correctNetwork: false,
+};
+
+const WalletContext = createContext<WalletContextValue | null>(null);
+
+export function WalletProvider({ children }: { children: React.ReactNode }) {
+  const sourceAdapters = useMemo(() => getWalletAdapters(), []);
+  const [availability, setAvailability] = useState<Record<string, boolean>>({});
+  const [activeAdapter, setActiveAdapter] = useState<WalletAdapter | null>(null);
+  const [wallet, setWallet] = useState<WalletSnapshot>(initial);
+  const [error, setError] = useState<string>();
 
   useEffect(() => {
-    if (!selectedWalletId) return;
     let active = true;
-    const apply = (snapshot: WalletSnapshot) => { if (active) setWallet(snapshot); };
-    readWallet(selectedWalletId)
-      .then(apply)
-      .catch((err) => { if (active) setError(toUserFacingError(err)); });
-    const unsubscribe = subscribeWallet(selectedWalletId, apply);
-    return () => { active = false; unsubscribe(); };
-  }, [selectedWalletId]);
+    void Promise.all(
+      sourceAdapters.map(async (adapter) => [adapter.id, await adapter.isAvailable()] as const),
+    ).then((entries) => {
+      if (active) setAvailability(Object.fromEntries(entries));
+    });
+    return () => {
+      active = false;
+    };
+  }, [sourceAdapters]);
 
-  const connect = useCallback(async () => {
-    if (!selectedWalletId) { setError("No compatible wallet is available. Please install a supported Stellar wallet."); return; }
-    setError(null);
+  const adapters = useMemo(
+    () => sourceAdapters.map((adapter) => ({ ...adapter, isAvailable: () => availability[adapter.id] ?? false })),
+    [availability, sourceAdapters],
+  );
+
+  const connect = useCallback(async (id?: string) => {
+    const adapter = sourceAdapters.find((candidate) => candidate.id === id) ?? sourceAdapters[0];
+    if (!adapter || !(await adapter.isAvailable())) {
+      setError("This wallet is not available in your browser.");
+      return;
+    }
+    setError(undefined);
     setWallet({ ...initial, status: "connecting" });
     try {
-      setWallet(await connectWallet(selectedWalletId));
-    } catch (err) {
+      const snapshot = await adapter.connect();
+      setActiveAdapter(adapter);
+      setWallet({
+        ...snapshot,
+        status: "connected",
+        connected: true,
+        correctNetwork: snapshot.network === "TESTNET" || snapshot.correctNetwork === true,
+      });
+    } catch (reason) {
       setWallet(initial);
-      setError(toUserFacingError(err));
+      setError(toUserFacingError(reason));
     }
-  }, [selectedWalletId]);
+  }, [sourceAdapters]);
 
-  const disconnect = useCallback(() => {
-    if (selectedWalletId) disconnectWallet(selectedWalletId);
-    setError(null);
+  useEffect(() => {
+    if (!activeAdapter) return;
+    const unsubscribeAccount = activeAdapter.onAccountChange?.((address) => {
+      setWallet((current) => ({ ...current, address, connected: Boolean(address), status: address ? "connected" : "disconnected" }));
+    });
+    const unsubscribeNetwork = activeAdapter.onNetworkChange?.((network) => {
+      setWallet((current) => ({ ...current, network, correctNetwork: network === "TESTNET" }));
+    });
+    return () => {
+      unsubscribeAccount?.();
+      unsubscribeNetwork?.();
+    };
+  }, [activeAdapter]);
+
+  const disconnect = useCallback(async () => {
+    await activeAdapter?.disconnect?.();
+    setActiveAdapter(null);
+    setError(undefined);
     setWallet(initial);
-  }, [selectedWalletId]);
+  }, [activeAdapter]);
 
-  const value = useMemo(
-    () => ({ ...wallet, wallets, selectedWalletId, selectWallet, connect, disconnect, error }),
-    [wallet, wallets, selectedWalletId, selectWallet, connect, disconnect, error],
-  );
+  const signTransaction = useCallback(async (xdr: string) => {
+    if (!activeAdapter) throw new Error("Connect a wallet before signing.");
+    return activeAdapter.signTransaction(xdr, { network: "TESTNET" });
+  }, [activeAdapter]);
+
+  const value = useMemo<WalletContextValue>(() => ({
+    ...wallet,
+    adapters,
+    walletName: activeAdapter?.name ?? null,
+    connect,
+    disconnect,
+    signTransaction,
+    onAccountChange: activeAdapter?.onAccountChange,
+    onNetworkChange: activeAdapter?.onNetworkChange,
+    error,
+  }), [activeAdapter, adapters, connect, disconnect, error, signTransaction, wallet]);
+
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
-export function useWallet() { const value = useContext(WalletContext); if (!value) throw new Error("useWallet must be used inside WalletProvider"); return value; }
+
+export function useWallet() {
+  const value = useContext(WalletContext);
+  if (!value) throw new Error("useWallet must be used inside WalletProvider");
+  return value;
+}

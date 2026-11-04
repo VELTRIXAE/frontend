@@ -7,25 +7,23 @@ type AccountContextValue = { account?: StellarAccount; health?: NetworkHealth; l
 const AccountContext = createContext<AccountContextValue | null>(null);
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const wallet = useWallet(); const [account,setAccount] = useState<StellarAccount>(); const [health,setHealth] = useState<NetworkHealth>(); const [loading,setLoading] = useState(false); const [error,setError] = useState<string>(); const [refreshedAt,setRefreshedAt] = useState<Date>();
-  const refresh = useCallback(async()=>{setLoading(true);setError(undefined);try{const [nextHealth,nextAccount]=await Promise.all([getNetworkHealth(),wallet.address?getStellarAccount(wallet.address):Promise.resolve(undefined)]);setHealth(nextHealth);setAccount(nextAccount);setRefreshedAt(new Date());}catch(reason){setError(reason instanceof Error?reason.message:"Stellar account data is unavailable.");setAccount(undefined);}finally{setLoading(false)}},[wallet.address]);
+  const { address, onAccountChange, onNetworkChange, error: walletError } = wallet;
+  const refresh = useCallback(async()=>{setLoading(true);setError(undefined);try{const [nextHealth,nextAccount]=await Promise.all([getNetworkHealth(),address?getStellarAccount(address):Promise.resolve(undefined)]);setHealth(nextHealth);setAccount(nextAccount);setRefreshedAt(new Date());}catch(reason){setError(reason instanceof Error?reason.message:"Stellar account data is unavailable.");setAccount(undefined);}finally{setLoading(false)}},[address]);
   useEffect(()=>{const timer=window.setTimeout(()=>void refresh(),0);return()=>window.clearTimeout(timer)},[refresh]);
   useEffect(()=>{const onFocus=()=>{if(document.visibilityState==="visible")void refresh()};document.addEventListener("visibilitychange",onFocus);return()=>document.removeEventListener("visibilitychange",onFocus)},[refresh]);
   // React to adapter account/network change events so data refreshes without a page reload.
   useEffect(()=>{
-    const unsubscribeAccount=wallet.onAccountChange?.(()=>{void refresh()});
-    const unsubscribeNetwork=wallet.onNetworkChange?.(()=>{void refresh()});
+    const unsubscribeAccount=onAccountChange?.(()=>{void refresh()});
+    const unsubscribeNetwork=onNetworkChange?.(()=>{void refresh()});
     return ()=>{unsubscribeAccount?.();unsubscribeNetwork?.()};
-  },[wallet.onAccountChange,wallet.onNetworkChange,refresh]);
-  // Surface provider-specific wallet errors as accessible messages.
-  useEffect(()=>{
-    if(wallet.error){setError(wallet.error);setAccount(undefined);setLoading(false);}
-  },[wallet.error]);
-  const value=useMemo(()=>({account,health,loading,error,refreshedAt,refresh}),[account,health,loading,error,refreshedAt,refresh]);
+  },[onAccountChange,onNetworkChange,refresh]);
+  const displayedError = walletError ?? error;
+  const value=useMemo(()=>({account,health,loading,error:displayedError,refreshedAt,refresh}),[account,health,loading,displayedError,refreshedAt,refresh]);
   return (
     <AccountContext.Provider value={value}>
-      {error ? (
+      {displayedError ? (
         <p role="alert" aria-live="assertive" className="sr-only">
-          {error}
+          {displayedError}
         </p>
       ) : null}
       {children}

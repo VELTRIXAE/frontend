@@ -83,7 +83,7 @@ function extractRequiredTrustlines(result: rpc.Api.SimulateTransactionSuccessRes
   return Array.from(trustlines);
 }
 
-export async function simulateTransactionXdr(xdr: string): Promise<SimulationResult> {
+export async function simulateTransactionXdrDetailed(xdr: string): Promise<SimulationResult> {
   const transaction = TransactionBuilder.fromXDR(xdr, networkPassphrase);
   const server = new rpc.Server(config.rpcUrl);
   const result = await server.simulateTransaction(transaction);
@@ -125,7 +125,7 @@ export async function simulateTransactionXdr(xdr: string): Promise<SimulationRes
   };
 }
 
-export async function submitSignedTransactionXdr(xdr: string): Promise<string> {
+export async function submitSignedTransactionXdrDetailed(xdr: string): Promise<string> {
   const transaction = TransactionBuilder.fromXDR(xdr, networkPassphrase);
   const server = new rpc.Server(config.rpcUrl);
   const submitted = await server.sendTransaction(transaction);
@@ -176,6 +176,8 @@ export async function reconcileTransactionStatus(
     hash,
     issues: [],
   };
+}
+
 export type SimulationFailureReason =
   | "invalid-xdr"
   | "wrong-network"

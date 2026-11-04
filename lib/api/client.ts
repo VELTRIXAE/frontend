@@ -1,7 +1,34 @@
 import { config } from "@/lib/config";
-import { marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, poolSchema, poolSnapshotSchema, portfolioHistoryResponseSchema, preparedSwapSchema, priceSnapshotSchema, quoteRequestSchema, quoteSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type QuoteRequest } from "./schemas";
-import { assetDetailSchema, assetSearchResponseSchema, indexedAnalyticsSchema, marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, pairDetailSchema, poolSchema, poolSnapshotSchema, preparedSwapSchema, quoteRequestSchema, quoteSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type AssetSearchQuery, type IndexedAnalyticsQuery, type QuoteRequest } from "./schemas";
-import { buildResponseSchema, errorEnvelopeSchema, marketSchema, marketsResponseSchema, networkStatusSchema, overviewSchema, poolSchema, poolSnapshotSchema, portfolioSchema, preparedSwapSchema, quoteRequestSchema, quoteSchema, submitResponseSchema, tokenSchema, tokensResponseSchema, transactionStatusSchema, type QuoteRequest } from "./schemas";
+import {
+  analyticsSeriesResponseSchema,
+  assetDetailSchema,
+  assetSearchResponseSchema,
+  buildResponseSchema,
+  contractRegistryResponseSchema,
+  errorEnvelopeSchema,
+  indexedAnalyticsSchema,
+  marketSchema,
+  marketsResponseSchema,
+  networkStatusSchema,
+  overviewSchema,
+  pairDetailSchema,
+  poolSchema,
+  poolSnapshotSchema,
+  portfolioHistoryResponseSchema,
+  portfolioSchema,
+  preparedSwapSchema,
+  priceSnapshotSchema,
+  quoteRequestSchema,
+  quoteSchema,
+  submitResponseSchema,
+  tokenSchema,
+  tokensResponseSchema,
+  transactionStatusSchema,
+  type AnalyticsWindow,
+  type AssetSearchQuery,
+  type IndexedAnalyticsQuery,
+  type QuoteRequest,
+} from "./schemas";
 import { z } from "zod";
 
 export class ApiError extends Error {
@@ -30,17 +57,17 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
   const requestId = createRequestId();
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const requestId = createRequestId();
+    const attemptRequestId = createRequestId();
     try {
       const timeout = AbortSignal.timeout(12_000);
       const signal = init?.signal ? AbortSignal.any([timeout, init.signal]) : timeout;
       const response = await fetch(new URL(`/api/v1/${path}`, config.apiUrl), {
         ...init,
-        headers: { accept: "application/json", "x-request-id": requestId, ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
+        headers: { accept: "application/json", "x-request-id": attemptRequestId, ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
         signal,
         cache: "no-store",
       });
-      const responseRequestId = response.headers.get("x-request-id") ?? requestId;
+      const responseRequestId = response.headers.get("x-request-id") ?? attemptRequestId;
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) {
         const parsedError = errorEnvelopeSchema.safeParse(body);
@@ -82,12 +109,10 @@ export const api = {
   overview: (signal?: AbortSignal) => request("analytics/overview", overviewSchema, { signal }),
   prices: (signal?: AbortSignal) => request("prices", priceSnapshotSchema, { signal }),
   portfolioHistory: (signal?: AbortSignal) => request("portfolio/history", portfolioHistoryResponseSchema, { signal }),
-};
-
-export const apiSchemas = { tokenSchema, marketSchema, priceSnapshotSchema, portfolioHistoryResponseSchema };
+  contractRegistry: (signal?: AbortSignal) => request("contracts/registry", contractRegistryResponseSchema, { signal }),
   searchAssets: (query: AssetSearchQuery, signal?: AbortSignal) =>
     request(
-      `assets${buildQuery({ q: query.q, code: query.code, issuer: query.issuer, contractId: query.contractId, verified: query.verified, cursor: query.cursor, limit: query.limit })}`,
+      `assets${buildQuery({ q: query.q, code: query.code, issuer: query.issuer, contract: query.contract, limit: typeof query.limit === "number" ? query.limit : undefined })}`,
       assetSearchResponseSchema,
       { signal },
     ),
@@ -100,6 +125,16 @@ export const apiSchemas = { tokenSchema, marketSchema, priceSnapshotSchema, port
       { signal },
     ),
   portfolio: (publicKey: string, signal?: AbortSignal) => request(`portfolio/${encodeURIComponent(publicKey)}`, portfolioSchema, { signal }),
+  analytics: (window: AnalyticsWindow, signal?: AbortSignal) =>
+    request(`analytics${buildQuery({ window })}`, analyticsSeriesResponseSchema, { signal }),
 };
 
-export const apiSchemas = { tokenSchema, marketSchema, assetDetailSchema, pairDetailSchema, indexedAnalyticsSchema };
+export const apiSchemas = {
+  tokenSchema,
+  marketSchema,
+  priceSnapshotSchema,
+  portfolioHistoryResponseSchema,
+  assetDetailSchema,
+  pairDetailSchema,
+  indexedAnalyticsSchema,
+};

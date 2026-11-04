@@ -17,8 +17,8 @@ const mockAdapters = vi.hoisted(() => {
     getAddress: vi.fn(async () => "GABCDEFGHIJKLMNOPQRSTUVWXYZ123456789"),
     getNetwork: vi.fn(async () => "TESTNET"),
     signTransaction: vi.fn(async (xdr: string) => xdr),
-    onAccountChange: vi.fn(() => () => undefined),
-    onNetworkChange: vi.fn(() => () => undefined),
+    onAccountChange: vi.fn((listener: (address: string | null) => void) => { void listener; return () => undefined; }),
+    onNetworkChange: vi.fn((listener: (network: string | null) => void) => { void listener; return () => undefined; }),
   };
   const albedo = {
     id: "albedo",
@@ -32,8 +32,8 @@ const mockAdapters = vi.hoisted(() => {
     getAddress: vi.fn(async () => "GALBEDOABCDEFGHIJKLMNOPQRSTUVWXYZ123456"),
     getNetwork: vi.fn(async () => "PUBLIC"),
     signTransaction: vi.fn(async (xdr: string) => xdr),
-    onAccountChange: vi.fn(() => () => undefined),
-    onNetworkChange: vi.fn(() => () => undefined),
+    onAccountChange: vi.fn((listener: (address: string | null) => void) => { void listener; return () => undefined; }),
+    onNetworkChange: vi.fn((listener: (network: string | null) => void) => { void listener; return () => undefined; }),
   };
   const unavailable = {
     id: "unavailable-wallet",
@@ -46,8 +46,8 @@ const mockAdapters = vi.hoisted(() => {
     getAddress: vi.fn(async () => null),
     getNetwork: vi.fn(async () => null),
     signTransaction: vi.fn(async (xdr: string) => xdr),
-    onAccountChange: vi.fn(() => () => undefined),
-    onNetworkChange: vi.fn(() => () => undefined),
+    onAccountChange: vi.fn((listener: (address: string | null) => void) => { void listener; return () => undefined; }),
+    onNetworkChange: vi.fn((listener: (network: string | null) => void) => { void listener; return () => undefined; }),
   };
   return { freighter, albedo, unavailable };
 });
@@ -81,6 +81,12 @@ vi.mock("@/lib/stellar/wallet", () => ({
     }
     return "Something went wrong while talking to your wallet.";
   }),
+  toUserFacingError: vi.fn((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/reject|denied|cancel/i.test(message)) return "The wallet request was rejected. Please try again.";
+    if (/not available|not installed/i.test(message)) return "This wallet is not available in your browser.";
+    return "Something went wrong while talking to your wallet.";
+  }),
 }));
 
 describe("wallet integration controls", () => {
@@ -99,6 +105,7 @@ describe("wallet integration controls", () => {
       </WalletProvider>,
     );
     await userEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /freighter/i }));
     expect(
       await screen.findByRole("button", { name: "Disconnect wallet" }),
     ).toBeInTheDocument();
@@ -116,11 +123,11 @@ describe("wallet integration controls", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
 
-    const freighterOption = await screen.findByRole("button", {
+    const freighterOption = await screen.findByRole("menuitem", {
       name: /freighter/i,
     });
-    const albedoOption = await screen.findByRole("button", { name: /albedo/i });
-    const unavailableOption = await screen.findByRole("button", {
+    const albedoOption = await screen.findByRole("menuitem", { name: /albedo/i });
+    const unavailableOption = await screen.findByRole("menuitem", {
       name: /unavailable wallet/i,
     });
 
@@ -138,7 +145,7 @@ describe("wallet integration controls", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /albedo/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /albedo/i }));
 
     expect(mockAdapters.albedo.connect).toHaveBeenCalledTimes(1);
     expect(mockAdapters.freighter.connect).not.toHaveBeenCalled();
@@ -167,7 +174,7 @@ describe("wallet integration controls", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /albedo/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /albedo/i }));
     await screen.findByRole("button", { name: "Disconnect wallet" });
 
     expect(accountListener).toBeDefined();
@@ -197,7 +204,7 @@ describe("wallet integration controls", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /albedo/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /albedo/i }));
     await screen.findByRole("button", { name: "Disconnect wallet" });
 
     expect(networkListener).toBeDefined();
@@ -223,7 +230,7 @@ describe("wallet integration controls", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /albedo/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /albedo/i }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/rejected/i);

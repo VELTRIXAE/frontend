@@ -47,7 +47,7 @@ export function SwapWidget(){
       setStatus("preparing");setMessage("Refreshing the quote and preparing an unsigned transaction…");
       const prepared=await api.prepareSwap(request,wallet.address);
       if(!prepared.quote.executable||prepared.quote.expiresAt<=Date.now())throw new Error("The prepared quote is not executable. Request a fresh quote.");
-      setPreparedFee(prepared.totalFee);setPreparedContracts(prepared.contracts);
+      setPreparedFee(prepared.totalFee);setPreparedContracts({swap:prepared.contractIds?.aggregator,router:prepared.contractIds?.router,factory:prepared.contractIds?.factory});
       setStatus("simulating");setMessage(`Independently simulating on Stellar Testnet. Estimated total fee: ${fromBaseUnits(prepared.totalFee,7,7)} XLM.`);
       await simulateTransactionXdr(prepared.transactionXdr);
       setStatus("signing");setMessage("Review the contract, limits, fee, and expiry in your wallet before approving.");
