@@ -1,2 +1,2 @@
-import { WalletButton } from "@/components/wallet/wallet-button"; import { CommandPalette } from "./command-palette";
-export function AppHeader() { return <header className="app-header"><div><span className="eyebrow">Trading workspace</span><b>Stellar Testnet</b></div><CommandPalette/><div className="app-header-actions"><WalletButton/></div></header>; }
+import { ShieldCheck } from "lucide-react"; import { WalletButton } from "@/components/wallet/wallet-button"; import { CommandPalette } from "./command-palette";
+export function AppHeader() { return <header className="app-header"><div><span className="eyebrow">Trading workspace</span><b>Stellar Testnet</b></div><CommandPalette/><div className="app-header-actions"><span className="testnet-lock" title="Mainnet is intentionally unavailable"><ShieldCheck/>Testnet only</span><WalletButton/></div></header>; }
