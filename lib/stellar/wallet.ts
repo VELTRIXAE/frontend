@@ -1,6 +1,6 @@
 import { networkPassphrase } from "@/lib/config";
 
-export type WalletSnapshot = { status: "disconnected" | "connecting" | "connected" | "unsupported" | "error"; address: string | null; network: string | null; correctNetwork: boolean; error?: string };
+export type WalletSnapshot = { status: "disconnected" | "connecting" | "connected" | "unsupported" | "error"; connected?: boolean; address: string | null; network: string | null; correctNetwork: boolean; error?: string };
 
 export type WalletAccountChange = { address: string | null; network: string | null; correctNetwork: boolean };
 export type WalletUnsubscribe = () => void;
@@ -12,14 +12,19 @@ export type WalletUnsubscribe = () => void;
 export interface StellarWalletAdapter {
   id: string;
   name: string;
-  isAvailable(): Promise<boolean>;
+  isAvailable(): boolean | Promise<boolean>;
   connect(): Promise<WalletSnapshot>;
   getAddress(): Promise<string | null>;
   getNetwork(): Promise<{ network: string | null; correctNetwork: boolean }>;
-  signTransaction(xdr: string): Promise<string>;
+  signTransaction(xdr: string, options?: { network: string }): Promise<string>;
+  disconnect?(): void | Promise<void>;
+  onAccountChange?(listener: (address: string | null) => void): WalletUnsubscribe;
+  onNetworkChange?(listener: (network: string | null) => void): WalletUnsubscribe;
   /** Subscribe to account/network changes without a page reload. Returns an unsubscribe fn. */
   subscribe(listener: (change: WalletAccountChange) => void): WalletUnsubscribe;
 }
+
+export type WalletAdapter = StellarWalletAdapter;
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Wallet request failed.";
 
@@ -95,44 +100,20 @@ const xbullAdapter: StellarWalletAdapter = {
   id: "xbull",
   name: "xBull",
   async isAvailable() {
-    try {
-      const kit = await import("@creit.tech/stellar-wallets-kit");
-      const wallets = kit.StellarWalletsKit?.getSupportedWallets?.() ?? [];
-      return wallets.some((w: { id: string }) => w.id === "xbull");
-    } catch { return false; }
+    return false;
   },
   async connect() {
-    try {
-      const kit = await import("@creit.tech/stellar-wallets-kit");
-      kit.StellarWalletsKit.init({ network: "TESTNET" });
-      kit.StellarWalletsKit.setWallet("xbull");
-      const { address } = await kit.StellarWalletsKit.getAddress();
-      if (!address) throw new Error("Wallet access was not granted.");
-      const network = await xbullAdapter.getNetwork();
-      return { status: "connected", address, network: network.network, correctNetwork: network.correctNetwork };
-    } catch (error) { return { status: "error", address: null, network: null, correctNetwork: false, error: mapWalletError(error, "xBull") }; }
+    return { status: "unsupported", address: null, network: null, correctNetwork: false, error: "xBull support is not installed in this build." };
   },
   async getAddress() {
-    try {
-      const kit = await import("@creit.tech/stellar-wallets-kit");
-      const { address } = await kit.StellarWalletsKit.getAddress();
-      return address || null;
-    } catch { return null; }
+    return null;
   },
   async getNetwork() {
-    try {
-      const kit = await import("@creit.tech/stellar-wallets-kit");
-      const network = await kit.StellarWalletsKit.getNetwork();
-      return { network: network.network, correctNetwork: network.networkPassphrase === networkPassphrase };
-    } catch { return { network: null, correctNetwork: false }; }
+    return { network: null, correctNetwork: false };
   },
   async signTransaction(xdr: string) {
-    try {
-      const kit = await import("@creit.tech/stellar-wallets-kit");
-      const { signedTxXdr } = await kit.StellarWalletsKit.signTransaction(xdr, { networkPassphrase });
-      if (!signedTxXdr) throw new Error("Transaction was not signed.");
-      return signedTxXdr;
-    } catch (error) { throw new Error(mapWalletError(error, "xBull")); }
+    void xdr;
+    throw new Error("xBull support is not installed in this build.");
   },
   subscribe(listener) {
     if (typeof window === "undefined") return () => {};
@@ -151,6 +132,10 @@ const adapters: Record<string, StellarWalletAdapter> = {
 };
 
 export function getAdapter(id: string): StellarWalletAdapter | null { return adapters[id] ?? null; }
+
+export function getWalletAdapters(): WalletAdapter[] { return Object.values(adapters); }
+
+export function toUserFacingError(error: unknown): string { return mapWalletError(error); }
 
 export async function availableWallets(): Promise<StellarWalletAdapter[]> {
   const results = await Promise.all(Object.values(adapters).map(async (adapter) => ({ adapter, ok: await adapter.isAvailable() })));

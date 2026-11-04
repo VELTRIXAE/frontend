@@ -228,7 +228,7 @@ export const analyticsGapSchema = z.object({
 });
 export type AnalyticsGap = z.infer<typeof analyticsGapSchema>;
 
-export const analyticsResponseSchema = z.object({
+export const indexedAnalyticsSchema = z.object({
   version: z.literal(1),
   network: z.literal("testnet"),
   window: aggregationWindowSchema,
@@ -240,14 +240,18 @@ export const analyticsResponseSchema = z.object({
   gaps: z.array(analyticsGapSchema),
   series: z.array(metricSeriesSchema),
 });
-export type AnalyticsResponse = z.infer<typeof analyticsResponseSchema>;
+export type IndexedAnalytics = z.infer<typeof indexedAnalyticsSchema>;
 
-export const assetIdentitySchema = z.object({
-  code: z.string().min(1).max(32),
-  issuer: z.string().min(1).nullable(),
-  contract: z.string().min(1),
+export const indexedAnalyticsQuerySchema = z.object({
+  window: aggregationWindowSchema,
+  from: unixMilliseconds.optional(),
+  to: unixMilliseconds.optional(),
+  asset: z.string().optional(),
+  pair: z.string().optional(),
+  pool: z.string().optional(),
+  granularity: z.string().optional(),
 });
-export type AssetIdentity = z.infer<typeof assetIdentitySchema>;
+export type IndexedAnalyticsQuery = z.input<typeof indexedAnalyticsQuerySchema>;
 
 export const priceSourceSchema = z.object({
   id: z.string().min(1),
@@ -373,7 +377,49 @@ export const errorEnvelopeSchema = z.object({
     message: z.string().min(1),
     requestId: z.string().min(1),
     retryable: z.boolean(),
-    details: z.record(z.unknown()).optional(),
+    details: z.record(z.string(), z.unknown()).optional(),
   }),
 });
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
+
+export const buildResponseSchema = z.object({
+  xdr: z.string().min(1),
+  networkPassphrase: z.string().min(1),
+  simulation: z.object({
+    success: z.boolean(),
+    latestLedger: z.number().int().nonnegative(),
+    minResourceFee: integerAmount,
+  }),
+});
+
+export const portfolioSchema = portfolioResponseSchema;
+export const pairDetailSchema = tradingPairSchema;
+export const priceSnapshotSchema = pricesResponseSchema;
+export const portfolioHistoryResponseSchema = portfolioHistorySchema;
+
+export const analyticsWindowSchema = z.enum(["24h", "7d", "30d"]);
+export type AnalyticsWindow = z.infer<typeof analyticsWindowSchema>;
+export const analyticsSeriesSchema = z.object({
+  metric: z.enum(["volume", "liquidity", "transactions", "tokens"]),
+  window: analyticsWindowSchema,
+  from: unixMilliseconds,
+  to: unixMilliseconds,
+  sourceLedger: z.number().int().nonnegative(),
+  indexedAt: unixMilliseconds,
+  partial: z.boolean(),
+  gaps: z.array(z.object({ from: unixMilliseconds, to: unixMilliseconds })).optional(),
+  points: z.array(z.object({ timestamp: unixMilliseconds, value: z.number().nullable() })),
+});
+export type AnalyticsSeries = z.infer<typeof analyticsSeriesSchema>;
+export const analyticsSeriesResponseSchema = z.array(analyticsSeriesSchema);
+
+export const contractRegistryResponseSchema = z.object({
+  verified: z.boolean(),
+  networkPassphrase: z.string().min(1),
+  deploymentLedger: z.number().int().nonnegative(),
+  sourceCommit: z.string().min(1),
+  swap: z.string().min(1).optional(),
+  router: z.string().min(1).optional(),
+  factory: z.string().min(1).optional(),
+});
+export type ContractRegistry = z.infer<typeof contractRegistryResponseSchema>;

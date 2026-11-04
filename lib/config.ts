@@ -8,6 +8,9 @@ const publicConfigSchema = z.object({
   network: z.literal("TESTNET"),
   pricingSourceUrl: z.string().url(),
   pricingSourceApiKey: z.string().min(1).optional(),
+  explorerUrl: z.string().url(),
+  networkPassphrase: z.literal(Networks.TESTNET),
+  verifiedPoolContracts: z.array(z.string()),
 });
 
 export const config = publicConfigSchema.parse({
@@ -18,6 +21,12 @@ export const config = publicConfigSchema.parse({
   pricingSourceUrl:
     process.env.NEXT_PUBLIC_PRICING_SOURCE_URL || "https://api.coingecko.com/api/v3",
   pricingSourceApiKey: process.env.NEXT_PUBLIC_PRICING_SOURCE_API_KEY || undefined,
+  explorerUrl: process.env.NEXT_PUBLIC_STELLAR_EXPLORER_URL || "https://stellar.expert/explorer/testnet",
+  networkPassphrase: Networks.TESTNET,
+  verifiedPoolContracts: (process.env.NEXT_PUBLIC_VELTRIXAE_VERIFIED_POOL_CONTRACTS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
 });
 
 export const networkPassphrase = Networks.TESTNET;
@@ -136,6 +145,9 @@ export function getConfigHealth(): ConfigHealth {
     mainnetGateReason,
     healthy: rpcUrlConfigured && horizonUrlConfigured,
   };
+}
+
+/**
  * Stellar contract registry
  *
  * Provides a reviewed source of truth for all contracts used by swap and
@@ -159,7 +171,7 @@ export type VerificationStatus = z.infer<typeof verificationStatusSchema>;
 const contractIdSchema = z
   .string()
   .refine(
-    (value) => StrKey.isValidContract(value) && value.startsWith("C") && value.length === 56,
+    (value) => value === "" || (StrKey.isValidContract(value) && value.startsWith("C") && value.length === 56),
     { message: "Invalid Stellar contract ID (expected 56-char strkey starting with 'C')" },
   );
 
@@ -183,7 +195,7 @@ export const contractRegistrySchema = z.object({
 
 export type ContractRegistry = z.infer<typeof contractRegistrySchema>;
 
-const REQUIRED_KINDS: readonly ContractKind[] = ["swap", "factory", "router"];
+const REQUIRED_KINDS = ["swap", "factory", "router"] as const;
 
 function parseLedger(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
@@ -271,7 +283,10 @@ function isEntryVerifiedOnTestnet(entry: ContractRegistryEntry): boolean {
  * contracts disable write actions.
  */
 export function isWriteEnabled(): boolean {
-  return REQUIRED_KINDS.every((kind) => isEntryVerifiedOnTestnet(contractRegistry[kind]));
+  return REQUIRED_KINDS.every((kind) => {
+    const entry = contractRegistry[kind];
+    return entry.kind === kind && isEntryVerifiedOnTestnet(entry);
+  });
 }
 
 /**
@@ -282,7 +297,9 @@ export function getContractMetadata(kind: ContractKind): ContractRegistryEntry |
   if (kind === "pool") {
     return contractRegistry.pools[0];
   }
-  return contractRegistry[kind];
+  if (kind === "swap") return contractRegistry.swap;
+  if (kind === "factory") return contractRegistry.factory;
+  return contractRegistry.router;
 }
 
 /**

@@ -38,7 +38,7 @@ export function WalletButton() {
           disabled={connecting}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          aria-label={connecting ? "Connecting to wallet" : "Connect a Stellar wallet"}
+          aria-label={connecting ? "Connecting to wallet" : "Connect wallet"}
         >
           <Wallet size={17} />
           {connecting ? "Connecting…" : "Connect wallet"}
@@ -55,6 +55,7 @@ export function WalletButton() {
                   className="wallet-menu-item"
                   disabled={!available}
                   aria-disabled={!available}
+                  aria-description={!available ? `${adapter.name} is not available in this browser` : undefined}
                   aria-label={
                     available
                       ? `Connect with ${adapter.name}`

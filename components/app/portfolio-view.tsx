@@ -52,7 +52,7 @@ export function PortfolioView() {
   const [priceState, setPriceState] = useState<PriceState>({ status: "idle" });
   const [historyState, setHistoryState] = useState<HistoryState>({ status: "idle" });
 
-  const balances = account?.balances ?? [];
+  const balances = useMemo(() => account?.balances ?? [], [account?.balances]);
   const identities = useMemo(
     () => balances.map((balance) => assetIdentity(balance)),
     [balances],
@@ -60,13 +60,11 @@ export function PortfolioView() {
   const identityKey = identities.map((id) => id.key).join("|");
 
   useEffect(() => {
-    if (!wallet.address || identities.length === 0) {
-      setPriceState({ status: "idle" });
-      return;
-    }
+    if (!wallet.address || identities.length === 0) return;
     let cancelled = false;
-    setPriceState({ status: "loading" });
-    fetchPortfolioPrices(identities)
+    const timer = window.setTimeout(() => {
+      setPriceState({ status: "loading" });
+      void fetchPortfolioPrices(identities)
       .then((result) => {
         if (cancelled) return;
         setPriceState({ status: "ready", prices: result.prices, fetchedAt: result.fetchedAt });
@@ -78,21 +76,21 @@ export function PortfolioView() {
           error: err instanceof Error ? err.message : "Price request failed",
         });
       });
+    }, 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
     // identityKey captures the set of assets being priced.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet.address, identityKey]);
 
   useEffect(() => {
-    if (!wallet.address || identities.length === 0) {
-      setHistoryState({ status: "idle" });
-      return;
-    }
+    if (!wallet.address || identities.length === 0) return;
     let cancelled = false;
-    setHistoryState({ status: "loading" });
-    fetchPortfolioHistory(identities)
+    const timer = window.setTimeout(() => {
+      setHistoryState({ status: "loading" });
+      void fetchPortfolioHistory(identities)
       .then((result) => {
         if (cancelled) return;
         setHistoryState({ status: "ready", points: result.points, fetchedAt: result.fetchedAt });
@@ -104,8 +102,10 @@ export function PortfolioView() {
           error: err instanceof Error ? err.message : "History request failed",
         });
       });
+    }, 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet.address, identityKey]);

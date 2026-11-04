@@ -127,7 +127,7 @@ export const HorizonTradeAggregationsResponseSchema = z.object({
       records: z.array(HorizonTradeAggregationSchema),
     })
     .optional(),
-  _links: z.record(z.unknown()).optional(),
+  _links: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type HorizonTradeAggregationsResponse = z.infer<
