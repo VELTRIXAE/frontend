@@ -43,7 +43,9 @@ export default defineConfig({
       name: 'chromium-mobile',
       use: {
         ...devices['Pixel 5'],
-        viewport: { width: 393, height: 851 },
+        // Exactly 375px wide so dropdown containment/scrolling checks match the
+        // acceptance criteria for the smallest supported mobile viewport.
+        viewport: { width: 375, height: 812 },
       },
     },
   ],

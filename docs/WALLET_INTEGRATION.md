@@ -53,4 +53,39 @@ Errors are exposed to assistive technology (e.g. via live regions) and never exp
 
 ## Testing notes
 
-Wallet behavior is mocked in unit tests across the adapter interface. A real Freighter + funded Testnet account and a real second-wallet flow have not been verified in this audit.
+Wallet behavior is mocked in unit tests across the adapter interface. Mocked tests exercise the adapter contract (connect/disconnect, availability, network and account change handling, error mapping) but **do not constitute live evidence** of real Freighter Testnet signing or on-chain finality. A real Freighter + funded Testnet account and a real second-wallet flow have not been verified in this audit.
+
+## Manual verification: real Freighter Testnet signing and finality
+
+This procedure validates the end-to-end flow against real Freighter and Stellar Testnet. It is distinct from README reconciliation and must only be recorded as passing when every step below was executed against a real wallet and real RPC. Do not record secrets (private keys, recovery phrases) or signed transaction envelopes (XDR) as evidence.
+
+### Preconditions
+
+- Backend executable readiness has been confirmed (backend builds and starts, and its health/readiness check passes).
+- Freighter is installed in the browser and unlocked.
+- Freighter is switched to **Testnet** and the active account is funded on Testnet.
+- The app is running against the Testnet backend and Testnet RPC endpoint.
+
+### Reproducible steps
+
+1. **Wallet connect** — open the app, select Freighter, and connect. Confirm the shortened public address shown matches the active Freighter Testnet account.
+2. **Network check** — confirm the adapter reads the Testnet network passphrase and that no network-mismatch error is shown. Switch Freighter to Mainnet and confirm signing is blocked with an accessible error; switch back to Testnet.
+3. **Quote** — request a quote and confirm it renders with the expected amounts and no error state.
+4. **User signing** — trigger the transaction action. Confirm Freighter opens and prompts for a signature. Approve the signature in Freighter.
+5. **Direct RPC submission** — confirm the app submits the signed transaction directly to the Testnet RPC endpoint (not via a mocked or stubbed path) and records the transaction hash.
+6. **Confirmation polling** — confirm the app polls for confirmation and reaches a final state (success or failure) for the transaction hash.
+7. **Balance refresh** — confirm the displayed balance refreshes after confirmation and reflects the on-chain change.
+
+### Evidence to record
+
+For each run, record: date/time (UTC), app commit, backend commit, Freighter version, Testnet network passphrase, the public address used (public key only), the transaction hash, the final confirmation status, and the observed balance before and after. Do **not** record private keys, recovery phrases, or signed envelopes.
+
+### Actual results
+
+- Not yet executed in this audit. No live Freighter Testnet signing or finality run has been recorded.
+
+### Explicit blockers
+
+- A real Freighter + funded Testnet account and a real second-wallet flow have not been verified.
+- No live run has been performed to confirm direct RPC submission and confirmation polling against Testnet.
+- Until the steps above are executed and evidence recorded, live signing and finality remain unverified; mocked tests must not be cited as success.

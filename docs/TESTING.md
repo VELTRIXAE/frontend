@@ -23,13 +23,13 @@ Browser tests use [Playwright](https://playwright.dev/) to exercise critical use
 The Playwright suites cover:
 
 - **Navigation** — landing route to the application routes and back.
-- **Token selection** — choosing source and destination tokens.
+- **Token selection** — choosing source and destination tokens, including keyboard interaction with the asset dropdown (Enter/Space to open and focus search, Escape and Close to dismiss with focus return, outside-pointer dismissal, single `onSelect` invocation, and disabled unsupported Testnet assets).
 - **Quoting** — requesting and rendering a quote.
 - **Simulation** — running a transaction simulation and displaying results.
 - **Signing rejection** — the wallet declining a signature request and the UI surfacing it.
 - **Error recovery** — recovering from a failed request and retrying successfully.
 - **Accessibility** — automated axe checks on the landing and application routes. Critical violations fail CI.
-- **Responsive** — layout regression checks at representative breakpoints.
+- **Responsive** — layout regression checks at representative breakpoints, including the asset dropdown at 375px and desktop widths to confirm it stays inside the viewport and scrolls when needed.
 
 ### Projects
 
@@ -47,7 +47,7 @@ Wallet and API behavior is mocked so results are reproducible and no real funds 
 - **Wallet fixture** — a stubbed wallet provider that returns canned account data, approves or rejects signing on demand, and never touches a real extension or secret key.
 - **API fixture** — intercepted network routes returning fixed quote, simulation, and error responses. Flaky network and wallet cases (timeouts, rejections, transient failures) are simulated with these deterministic mocks rather than live calls.
 
-Fixtures reset between tests so ordering does not affect outcomes.
+Fixtures reset between tests so ordering does not affect outcomes. Asset discovery is mocked with deterministic Horizon fixtures; duplicate symbols remain distinguishable by issuer, and discovered assets without backend support stay disabled.
 
 ### Accessibility
 
@@ -86,7 +86,7 @@ pnpm test:e2e --update-snapshots
 ### CI behavior
 
 CI installs Playwright browsers with dependencies and runs both Chromium projects. Critical accessibility violations and responsive baseline mismatches fail the build. Because all wallet and network interactions are mocked, the suites require no secrets, real funds, or live backend and run deterministically.
-CI runs frozen dependency installation, lint, strict TypeScript, coverage-gated tests, and a production build. CodeQL and dependency review run separately. Browser E2E and automated axe coverage remain planned in frontend issue #18.
+CI runs frozen dependency installation, lint, strict TypeScript, coverage-gated tests, and a production build. CodeQL and dependency review run separately. Browser E2E and automated axe coverage are described below.
 
 ## Backend contract fixtures
 
@@ -126,6 +126,23 @@ The unified Stellar wallet adapter (issue #13) is tested with mocked providers:
 
 Tests assert that private keys and recovery phrases are never requested or stored by the adapter.
 
-## What these tests do not cover
+## Live Freighter Testnet validation
 
-Mocked tests do not prove that Freighter, other wallets, the deployed backend, or Stellar Testnet contracts work live. Live verification against Testnet is a manual step until browser E2E coverage lands in frontend issue #18.
+Mocked unit and E2E tests do not prove that Freighter, other wallets, the deployed backend, or Stellar Testnet contracts work live. Live verification is a separate manual procedure (issue #59) that runs only after backend executable readiness is confirmed. It is distinct from README reconciliation (issue #55).
+
+### Procedure
+
+1. Confirm the backend is executable-ready and the deployed API is reachable on Testnet.
+2. Connect Freighter on Testnet and confirm the app detects the correct network; a wrong network must surface an accessible error.
+3. Request a quote and confirm the displayed minimum received, price impact, slippage, and route.
+4. Sign the transaction in Freighter and confirm the app submits it directly via RPC.
+5. Wait for confirmation and confirm the balance refreshes to reflect the new state.
+6. Record the result, including any explicit blockers.
+
+### Evidence
+
+Record reproducible steps and actual results in the issue or linked evidence document. Do not include secrets, private keys, recovery phrases, or signed envelopes. Screenshots and transaction hashes are acceptable; signed XDRs are not.
+
+### Honesty requirement
+
+Success must not be claimed on mocked evidence. A passing unit or E2E suite is not live verification. If any step cannot be completed, record the blocker explicitly rather than reporting success.
